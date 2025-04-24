@@ -1,5 +1,7 @@
 # **RISC-V 五级流水顺序双发射处理器 (Basic Functionality Spec)**
 
+[TOC]
+
 ## **1. 引言**
 
 本文档旨在详细描述一款五级流水线、顺序双发射的 RISC-V 处理器。该处理器将实现 RV32I 基本指令集，并满足基本功能要求，为后续的扩展和优化提供基础平台。
@@ -8,7 +10,10 @@
 
 *   包含RV32I的所有指令
 *   实现csrrw指令和mtime、mcycle这两个csr
-*   实现bi-mode分支预测器
+*   实现RV32M
+*   实现TAGE分支预测器
+*   实现不定周期的访存级，即访存级的延时不被固定为一个周期
+*   在实现不定周期访存级的基础上，实现一个简易的dcache
 *   五级流水线
 *   顺序双发 
 *   通过drystone测试
@@ -21,479 +26,750 @@
 | **流水线级数** | 5                    | 五级流水线：取指 (IF)、译码 (ID)、执行 (EX)、访存 (MEM)、写回 (WB) |
 | **发射宽度**   | 2                    | 顺序双发射，每个周期最多发射两条指令到执行阶段               |
 | **执行单元**   | 至少 2 个 ALU        | 执行阶段至少包含两个算术逻辑单元 (ALU)，可根据需要扩展其他执行单元，如乘除法器等 |
-| **分支预测器** | Bi-mode              | 双模分支预测器 (Bi-mode Branch Predictor)                    |
+| **分支预测器** | TAGE分支预测器       | TAgged GEometric length predictor                            |
 | **CSR 支持**   | csrrw, mtime, mcycle | 支持 `csrrw` 指令和 `mtime`、`mcycle` 控制状态寄存器 (CSR)   |
 | **存储器接口** | 不定周期访问         | 支持不定周期访存，存储器接口包含请求和就绪信号               |
 | **测试基准**   | Drystone             | 通过 Drystone 基准测试验证处理器功能                         |
 
 ## **4. 微架构概述**
 
-该处理器采用五级流水线结构，以提高指令执行的并发度和吞吐率。处理器支持顺序双发射，在每个时钟周期可以尝试发射两条指令进入执行阶段。为了处理数据冒险、控制冒险和结构冒险，需要实现流水线控制逻辑。为了支持更复杂的程序执行，处理器具备异常和中断处理能力。
+该处理器参考CDIM处理器架构(https://github.com/Maxpicca-Li/CDIM/tree/master)，设计了一款款双发射五级顺序流水线 CPU，其支持指令 FIFO、分支预测、指令缓存和数据缓存。其中，五级顺序流水线由取指（Instruction Fetch）、译码（Instruction Decode）、执行（Excute）、访存（Memory access），写回（Write Back）五个阶段组成；双发射采用对称双发逻辑以充分保证双发率；指令FIFO 可以隔离取指阶段和后续阶段，以实现高效取指的作用；分支预测采用TAGE分支预测器来提高预测的准确率。处理器的数据通路示意图如下所示，其中红线部分为 MasterPath，蓝线部分为 Slave Path。在对称双发射中，Master 和 Slave 的主要区别在于前者先于后者执行，在处理异常、提交等事宜时会被优先处理。
 
-### **4.1. 流水线阶段**
+### **4.1. 双发策略**
 
-1.  **取指 (Instruction Fetch, IF):**
-    *   负责从指令存储器获取指令。
-    *   支持双发射宽度, 每个周期获取两条指令。
-    *   处理分支预测和指令地址生成。
-    *   检测并报告取指阶段的异常 (例如，指令地址未对齐)。
+在双发射的 CPU 设计中，双发策略会影响整个数据通路的设计，我们下面介绍我们处理器的双发策略，在issuectrl的代码部分解释了整个处理器的双发策略。
 
-2.  **译码 (Instruction Decode, ID):**
-    *   对取指阶段获取的指令进行解码，识别指令类型和操作数。
-    *   进行寄存器读取和依赖关系检查。
-    *   为执行阶段准备操作数和控制信号。
-    *   支持双发射宽度, 每个周期解码两条指令。
-    *   检测并报告译码阶段的异常 (例如，非法指令)。
+**1．only＿Master 类指令：**即只能放在 Master 发射，且 Slave 不发射指令。对于可能刷新整个流水线的指令（如 MTC0，SYSCALL，ERET，BREAK，TLBWI，TLBWR 等指令），如果在 Slave 中检测到这类指令，则暂停 Slave 发射，将其延迟到下一周期的 Master 发射；如果在 Master 中检测到这类指令，也会暂停 Slave 发射，避免不必要的流水线刷新。
 
-3.  **执行 (Execute, EX):**
-    *   执行解码后的指令操作，例如算术逻辑运算、比较运算等。
-    *   至少包含两个 ALU 执行单元，可以并行执行两条指令的 ALU 操作。
-    *   可以包含其他执行单元 (例如移位器、乘除法器等)。
-    *   处理分支指令的条件判断和目标地址计算。
-    *   检测并报告执行阶段的异常 (例如，除零错误)。
+**2．only＿in＿Master 类指令：**即只能放在 Master 发射，且 Slave可发射指令。对于跳转指令，在一定条件下会跳转到其他地址，并刷新整个流水线。和 only＿Master 不同的是，跳转指令会涉及到延迟槽的处理。故如果在 Slave 中检测到这类指令，则暂停 Slave 发射，将其延迟到下一周期的 Master 发射；如果在 Master 中检测到这类指令，若满足 Slave 发射条件，则发射该条指令（延迟槽），若不满足，则在下一周期的 Master 中发射延迟槽数据。
 
-4.  **访存 (Memory Access, MEM):**
-    *   执行访存指令 (load, store)。
-    *   根据指令类型进行数据存储器 (D-Cache, 在基本功能要求中可简化为数据存储器) 的读写操作。
-    *   支持不定周期访存，需要处理存储器就绪信号。
-    *   检测并报告访存阶段的异常 (例如，访存地址未对齐、页错误)。
+**3．数据冲突**
+（a）．RAW 冲突：检查 Master 和 Slave 之间是否存在 HiLo，CP0，GPR 等寄存器的 RAW 情况，若存在，则 Slave 不发射。
+（b）．Load To Use 冲突：检查 Slave 读到的寄存器是否是当前在 E阶段执行的读存指令的结果，若是，则 Slave 不发射。
 
-5.  **写回 (Write Back, WB):**
-    *   将执行结果或访存结果写回寄存器堆。
-    *   支持双发射宽度, 每个周期写回两条指令的结果。
-    *   检测并报告写回阶段的异常 (例如，写回冲突，虽然在基本流水线中通常不会出现)。
+**4．数据有效性：**Slave 发射的前提是 Master 发射或当前第二条指令有效。若遇到 Master 暂停发射或指令 FIFO为空的情况下，Slave 不发射。
+
+
+
+### **4.2. 冲突处理**
+
+**2.4.1 数据冲突**
+－RAW 冲突：当 Master 或 Slave 需要读取的数据是已经发射且进入后续流水阶段的指令，会产生 RAW 冲突。本设计将需要的数据均前推到 D 阶段，前推后立即进入触发器后再进入 E阶段使用，这样可以避免执行数据的路径过长。其中，若需要读取的数据是当前 E 阶段的访存数据，则需要进行阻塞以等待访存数据在 M 阶段返回。若需要读取的数据是当前 E 阶段的计算结果，或 M 阶段的计算结果，或 M 阶段的访存结果，则通过数据前推模块前推到 D 阶段。
+－WAW 冲突：当同周期的 Master 和 Slave 写入寄存器的地址一致时，会产生 WAW 冲突。因为 Slave 是 Master后一条指令，故 RegFile 更新时，会优先写入 Slave 的结果。
+－WAR 冲突：由于本设计为顺序流水线，故不存在 WAR 冲突。
+
+**2.4.2 控制冲突**
+当遇到跳转指令时，会产生控制冲突。我们用延迟槽来解决控制冲突。本设计中，若产生跳转（译码阶段或执行阶段），则根据发射情况判断当前 Path 中的第一条读数据是否是延迟槽数据。如果是，则需要判断当时是否有阻塞信号，若没有则直接执行该第一条读数据，若有则需要保留该数据到指定 delayslot＿data 寄存器，以备阻塞取消后使用；此外跳转会引起流水线的刷新，但需要保证延迟槽数据能够不被刷新并正常流入下一阶段执行。如果不是，则正常刷新流水线即可。
+
+
+
+### 4.3. 结构框图
+
+![image-20250424141106775](C:\Users\music\AppData\Roaming\Typora\typora-user-images\image-20250424141106775.png)
+
+红线部分为Master Path，蓝线部分为Slave Path
 
 ## **5. 模块端口定义及功能描述 **
 
-请注意：为了实现正确的流水线操作，除了以下定义的模块，还需要实现一个关键的“流水线控制逻辑” (Pipeline Control Logic)。该逻辑并非作为一个独立的模块列出端口，而是分布在各个流水线阶段，或集中在一个控制单元中。它负责处理数据冒险、控制冒险、结构冒险（在需要时），并生成流水线停顿、冲刷、转发等控制信号，以确保指令的正确顺序执行和流水线的平稳运行。以下模块的端口定义和功能描述中，会明确指出哪些信号与流水线控制逻辑相关。
-
-以下列出各主要模块的端口定义及功能描述。信号命名约定： `Module_SignalName_Direction_Datawidth`，方向 `I` 表示输入， `O` 表示输出。
+以下列出各主要模块的端口定义及功能描述。方向 `I` 表示输入， `O` 表示输出。
 
 ### **5.1. 指令取指模块 (IF - Instruction Fetch)**
 
-| 端口名称                                        | 方向 | 位宽 | 功能描述                                                     |
-| :---------------------------------------------- | :--- | :--- | :----------------------------------------------------------- |
-| IF_Clk_I                                        | I    | 1    | 时钟信号                                                     |
-| IF_Reset_I                                      | I    | 1    | 复位信号                                                     |
-| **--- 指令存储器接口 ---**                      |      |      |                                                              |
-| IF_InstMemAddr_O[2]                             | O    | 32   | 指令存储器地址输出 (每个发射槽位一个)。通常是 PC 和 PC+4。双发射宽度。 |
-| IF_InstMemReq_O[2]                              | O    | 1    | 指令存储器请求信号输出 (每个发射槽位一个)。指示 IF 阶段需要访问指令存储器。双发射宽度。 |
-| **--- PC 及控制流输入 ---**                     |      |      |                                                              |
-| IF_PC_Update_I                                  | I    | 32   | 输入的用于更新PC的值 (来自PC更新逻辑，例如分支跳转、异常处理)。 |
-| IF_PC_Update_Enable_I                           | I    | 1    | 使能PC更新，通常在分支预测错误、跳转或异常时有效。           |
-| IF_PredictedTaken_I                             | I    | 1    | 来自分支预测器的分支预测结果 (针对IF阶段PC[0])，指示分支是否预测为发生跳转。 |
-| IF_PredictedTargetAddr_I                        | I    | 32   | 来自分支预测器的分支目标地址预测 (针对IF阶段PC[0])，用于分支跳转预取的目标地址。 |
-| IF_BranchTaken_I                                | I    | 1    | 来自 EX 阶段的实际分支判断结果，指示分支是否实际发生，用于分支预测器更新和流水线控制逻辑进行分支预测错误恢复。 **(注意：这是单个信号，代表流水线中第一个解决的分支结果)** |
-| IF_BranchTargetAddr_I                           | I    | 32   | 来自 EX 阶段的实际分支目标地址，用于分支预测器更新和流水线控制逻辑进行分支预测错误恢复。 **(注意：这是单个信号)** |
-| **--- 流水线控制输入 ---**                      |      |      |                                                              |
-| IF_FetchEnable_I                                | I    | 1    | 使能取指，用于流水线控制，通常由流水线控制逻辑根据流水线状态和指令执行需求进行控制 (例如，发生停顿时可能禁止取指)。 |
-| IF_Stall_I                                      | I    | 1    | 输入的停顿信号，来自流水线控制逻辑 (例如下游阶段请求停顿)，指示 IF 阶段是否需要停顿。 |
-| **— 输入来自BP分支预测器 —**                    |      |      |                                                              |
-| IF_PC_Jump_In_I                                 | I    | 32   | 来自BP的跳转目标的PC值                                       |
-| IF_Jump_Enable_In_I                             | I    | 1    | 来自BP的是否发生跳转的布尔值                                 |
-| **--- 输出到 IF/ID 寄存器以及BP分支预测器 ---** |      |      |                                                              |
-| IF_Instr_Out_O[2]                               | O    | 32   | 输出的指令 (每个发射槽位一个)，双发射宽度，最多两条指令，传递到 IF/ID 寄存器。 |
-| IF_PC_Out_O[2]                                  | O    | 32   | 输出的指令对应的PC值 (每个发射槽位一个)，双发射宽度，传递到 IF/ID 寄存器和分支预测器。 |
-| **--- 状态与异常输出 ---**                      |      |      |                                                              |
-| IF_Stall_O                                      | O    | 1    | 输出的停顿请求信号，指示 IF 阶段自身是否因为等待资源 (例如，指令存储器未就绪) 而请求停顿，该信号需要传递给流水线控制逻辑。 |
-| IF_ExceptionReq_O                               | O    | 1    | 异常请求信号输出，指示 IF 阶段检测到异常 (例如，指令地址未对齐)。 |
-| IF_ExceptionID_O                                | O    | ~4   | 异常 ID 输出，指示 IF 阶段检测到的异常类型 (位宽取决于异常编码)。 |
+#### **pc_reg**
+
+| clk              | I    | 1    | 时钟信号                                          |
+| ---------------- | ---- | ---- | ------------------------------------------------- |
+| rst              | I    | 1    | 复位信号                                          |
+| pc_en            | I    | 1    | PC 寄存器使能信号（正常运行或异常跳转时）         |
+| M_except         | I    | 1    | M 阶段是否发生异常或中断需要跳转                  |
+| M_except_addr    | I    | 32   | M 阶段异常跳转的目标 PC 地址                      |
+| M_flush_all      | I    | 1    | M 阶段是否需要刷新整个流水线                      |
+| M_flush_all_addr | I    | 32   | M 阶段刷新流水线时的目标 PC 地址（通常是 PC+4）   |
+| E_bj             | I    | 1    | E 阶段是否发生分支/跳转                           |
+| E_bj_target      | I    | 32   | E 阶段分支/跳转的目标 PC 地址                     |
+| D_bj             | I    | 1    | D 阶段是否发生分支/跳转                           |
+| D_bj_target      | I    | 32   | D 阶段分支/跳转的目标 PC 地址                     |
+| D_fifo_full      | I    | 1    | 指令 FIFO 是否已满                                |
+| F_inst_data_ok1  | I    | 1    | F 阶段从指令存储器获取的第一条指令是否有效        |
+| F_inst_data_ok2  | I    | 1    | F 阶段从指令存储器获取的第二条指令是否有效        |
+| pc_next          | O    | 32   | 计算出的下一个时钟周期的 PC 值（未考虑跳转/异常） |
+| pc_curr          | O    | 32   | 当前时钟周期的 PC 值                              |
+
+#### **IFIFO**
+
+| 端口名称                 | 方向 | 位宽 | 功能描述                                                   |
+| ------------------------ | ---- | ---- | ---------------------------------------------------------- |
+| clk                      | I    | 1    | 时钟信号                                                   |
+| rst                      | I    | 1    | 复位信号                                                   |
+| fifo_rst                 | I    | 1    | FIFO 复位信号（通常在 D 阶段刷新时）                       |
+| flush_delay_slot         | I    | 1    | 是否需要特殊处理刷新延迟槽指令                             |
+| D_ena                    | I    | 1    | D 阶段是否使能（影响 FIFO 读指针）                         |
+| i_stall                  | I    | 1    | 来自指令 Cache 的暂停信号（影响 FIFO 写指针）              |
+| master_is_branch         | I    | 1    | D 阶段 Master 指令是否是分支/跳转指令                      |
+| delay_sel_rst            | I    | 1    | 延迟槽特殊复位/选择逻辑控制信号                            |
+| D_delay_rst              | I    | 1    | D 阶段检测到跳转，指示下一条 Master 指令是延迟槽           |
+| E_delay_rst              | I    | 1    | E 阶段检测到跳转，指示当前 Master 指令是延迟槽             |
+| read_en1                 | I    | 1    | Master 指令读取 FIFO 使能（通常等于 D_ena）                |
+| read_en2                 | I    | 1    | Slave 指令读取 FIFO 使能（来自 issue_ctrl）                |
+| read_tlb_refill1         | O    | 1    | 从 FIFO 读出的 Master 指令是否关联 TLB refill 异常         |
+| read_tlb_refill2         | O    | 1    | 从 FIFO 读出的 Slave 指令是否关联 TLB refill 异常          |
+| read_tlb_invalid1        | O    | 1    | 从 FIFO 读出的 Master 指令是否关联 TLB invalid 异常        |
+| read_tlb_invalid2        | O    | 1    | 从 FIFO 读出的 Slave 指令是否关联 TLB invalid 异常         |
+| read_address1            | O    | 32   | 从 FIFO 读出的 Master 指令的 PC 地址                       |
+| read_address2            | O    | 32   | 从 FIFO 读出的 Slave 指令的 PC 地址                        |
+| read_data1               | O    | 32   | 从 FIFO 读出的 Master 指令内容                             |
+| read_data2               | O    | 32   | 从 FIFO 读出的 Slave 指令内容                              |
+| write_en1                | I    | 1    | F 阶段获取的第一条指令有效，允许写入 FIFO                  |
+| write_en2                | I    | 1    | F 阶段获取的第二条指令有效，允许写入 FIFO                  |
+| write_tlb_refill1        | I    | 1    | 写入 FIFO 的第一条指令是否关联 TLB refill 异常（来自 IF）  |
+| write_tlb_refill2        | I    | 1    | 写入 FIFO 的第二条指令是否关联 TLB refill 异常（来自 IF）  |
+| write_tlb_invalid1       | I    | 1    | 写入 FIFO 的第一条指令是否关联 TLB invalid 异常（来自 IF） |
+| write_tlb_invalid2       | I    | 1    | 写入 FIFO 的第二条指令是否关联 TLB invalid 异常（来自 IF） |
+| write_address1           | I    | 32   | 写入 FIFO 的第一条指令的 PC 地址 (F_pc)                    |
+| write_address2           | I    | 32   | 写入 FIFO 的第二条指令的 PC 地址 (F_pc + 4)                |
+| write_data1              | I    | 32   | 写入 FIFO 的第一条指令内容 (来自 I-Cache)                  |
+| write_data2              | I    | 32   | 写入 FIFO 的第二条指令内容 (来自 I-Cache)                  |
+| master_is_in_delayslot_o | O    | 1    | 输出，指示当前从 FIFO 读出的 Master 指令是否处于延迟槽     |
+| empty                    | O    | 1    | FIFO 是否为空                                              |
+| almost_empty             | O    | 1    | FIFO 是否几乎为空（如只剩一条指令）                        |
+| full                     | O    | 1    | FIFO 是否已满                                              |
 
 ### **5.2. 指令译码模块 (ID - Instruction Decode)**
 
-| 端口名称                            | 方向 | 位宽 | 功能描述                                                     |
-| :---------------------------------- | :--- | :--- | :----------------------------------------------------------- |
-| ID_Clk_I                            | I    | 1    | 时钟信号                                                     |
-| ID_Reset_I                          | I    | 1    | 复位信号                                                     |
-| **--- 输入来自 IF/ID 寄存器 ---**   |      |      |                                                              |
-| ID_Instr_In_I[2]                    | I    | 32   | 输入的指令 (双发射宽度)，来自 IF/ID 寄存器。                 |
-| ID_PC_In_I[2]                       | I    | 32   | 输入的指令对应的 PC 值 (双发射宽度)，来自 IF/ID 寄存器。     |
-| **--- 寄存器堆读端口接口 ---**      |      |      | **(需要4个读端口: Instr0-rs1, Instr0-rs2, Instr1-rs1, Instr1-rs2)** |
-| ID_RF_RAddr1_Instr0_Out_O           | O    | 5    | 寄存器堆读端口1地址输出，用于 **第一条指令 (Instr0)** 的 rs1 字段。 |
-| ID_RF_REnable1_Instr0_Out_O         | O    | 1    | 寄存器堆读端口1使能输出，用于 **第一条指令 (Instr0)** 的读取。 |
-| ID_RF_RAddr2_Instr0_Out_O           | O    | 5    | 寄存器堆读端口2地址输出，用于 **第一条指令 (Instr0)** 的 rs2 字段。 |
-| ID_RF_REnable2_Instr0_Out_O         | O    | 1    | 寄存器堆读端口2使能输出，用于 **第一条指令 (Instr0)** 的读取。 |
-| ID_RF_RData1_Instr0_In_I            | I    | 32   | 寄存器堆读端口1数据输入，用于 **第一条指令 (Instr0)**，接收从寄存器堆读取的第一个操作数 (rs1 data)。 |
-| ID_RF_RData2_Instr0_In_I            | I    | 32   | 寄存器堆读端口2数据输入，用于 **第一条指令 (Instr0)**，接收从寄存器堆读取的第二个操作数 (rs2 data)。 |
-| ID_RF_RAddr1_Instr1_Out_O           | O    | 5    | 寄存器堆读端口3地址输出，用于 **第二条指令 (Instr1)** 的 rs1 字段。 |
-| ID_RF_REnable1_Instr1_Out_O         | O    | 1    | 寄存器堆读端口3使能输出，用于 **第二条指令 (Instr1)** 的读取。 |
-| ID_RF_RAddr2_Instr1_Out_O           | O    | 5    | 寄存器堆读端口4地址输出，用于 **第二条指令 (Instr1)** 的 rs2 字段。 |
-| ID_RF_REnable2_Instr1_Out_O         | O    | 1    | 寄存器堆读端口4使能输出，用于 **第二条指令 (Instr1)** 的读取。 |
-| ID_RF_RData1_Instr1_In_I            | I    | 32   | 寄存器堆读端口3数据输入，用于 **第二条指令 (Instr1)**，接收从寄存器堆读取的第一个操作数 (rs1 data)。 |
-| ID_RF_RData2_Instr1_In_I            | I    | 32   | 寄存器堆读端口4数据输入，用于 **第二条指令 (Instr1)**，接收从寄存器堆读取的第二个操作数 (rs2 data)。 |
-| **--- 输出到 ID/EX 寄存器 ---**     |      |      |                                                              |
-| ID_Instr_Out_O[2]                   | O    | 32   | 输出的指令 (双发射宽度)，传递到 ID/EX 寄存器 (可选，主要用于调试或异常处理)。 |
-| ID_PC_Out_O[2]                      | O    | 32   | 输出的指令对应的 PC 值 (双发射宽度)，传递到 ID/EX 寄存器。   |
-| ID_RS1Data_Out_O[2]                 | O    | 32   | 输出的寄存器堆读取的 rs1 数据 (双发射宽度)，传递到 ID/EX 寄存器。 |
-| ID_RS2Data_Out_O[2]                 | O    | 32   | 输出的寄存器堆读取的 rs2 数据 (双发射宽度)，传递到 ID/EX 寄存器。 |
-| ID_Immediate_Out_O[2]               | O    | 32   | 输出的指令中的立即数 (符号扩展后，双发射宽度)，传递到 ID/EX 寄存器。 |
-| ID_RegWriteAddr_Out_O[2]            | O    | 5    | 输出的寄存器写地址 (rd 字段，双发射宽度)，传递到 ID/EX 寄存器。 |
-| **--- 控制信号输出 (到 ID/EX) ---** |      |      |                                                              |
-| ID_ALUOp_Out_O[2]                   | O    | ~4-6 | 输出的 ALU 操作类型控制信号 (位宽取决于ALU实现，双发射宽度)，传递到 ID/EX 寄存器。 |
-| ID_MemOp_Out_O[2]                   | O    | ~3   | 输出的访存操作类型控制信号 (例如 Load, Store, None, 以及类型 L/S - B/H/W，位宽取决于编码，双发射宽度)，传递到 ID/EX 寄存器。 |
-| ID_RegWriteEnable_Out_O[2]          | O    | 1    | 输出的寄存器写使能控制信号 (双发射宽度)，传递到 ID/EX 寄存器。 |
-| ID_BranchCtrl_Out_O[2]              | O    | ~3-4 | 输出的分支控制信号 (例如 BEQ, BNE, JAL, JALR, 无分支，位宽取决于编码，双发射宽度)，传递到 ID/EX 寄存器。 |
-| ID_CSROP_Out_O                      | O    | ~2-3 | 输出的 CSR 操作类型控制信号 (例如 R/W/S/C，**单发射宽度**)。 |
-| ID_CSRAddr_Out_O                    | O    | 12   | 输出的 CSR 寄存器地址 (**单发射宽度**)。                     |
-| **--- 流水线控制接口 ---**          |      |      |                                                              |
-| ID_Stall_I                          | I    | 1    | 输入的停顿信号，来自流水线控制逻辑 (例如 EX 或 MEM 阶段请求停顿)。 |
-| ID_Flush_I                          | I    | 1    | 流水线冲刷信号输入，用于处理分支预测错误或异常，该信号由流水线控制逻辑生成，用于清空 ID 阶段。 |
-| ID_Stall_O                          | O    | 1    | 输出的停顿请求信号，指示 ID 阶段是否因为需要停顿 (例如，数据冒险 RAW、结构冒险、指令非法等) 而请求停顿，传递给流水线控制逻辑。 |
-| **--- 异常输出 ---**                |      |      |                                                              |
-| ID_ExceptionReq_O                   | O    | 1    | 异常请求信号输出，指示 ID 阶段检测到异常 (例如，非法指令)。  |
-| ID_ExceptionID_O                    | O    | ~4   | 异常 ID 输出，指示 ID 阶段检测到的异常类型。                 |
+#### **ID_M和ID_S**
+
+| 端口名称              | 方向 | 位宽      | 功能描述                                        |
+| --------------------- | ---- | --------- | ----------------------------------------------- |
+| instr                 | I    | 32        | 输入的指令码                                    |
+| c0_useable            | I    | 1         | CP0 是否可用 (根据 MIPS 架构模式判断)           |
+| op                    | O    | 6         | 指令的 opcode 字段                              |
+| rs                    | O    | 5         | 指令的 rs 字段 (源寄存器 1 地址)                |
+| rt                    | O    | 5         | 指令的 rt 字段 (源寄存器 2 / 目标寄存器地址)    |
+| rd                    | O    | 5         | 指令的 rd 字段 (目标寄存器地址)                 |
+| funct                 | O    | 6         | R 型指令的 funct 字段                           |
+| reg_waddr             | O    | 5         | 该指令需要写入的寄存器地址                      |
+| shamt_value           | O    | 32        | 移位指令的移位量 (shamt)                        |
+| sign_extend_imm_value | O    | 32        | 指令中的立即数进行符号扩展后的值                |
+| is_link_pc8           | O    | 1         | 是否是链接指令 (如 JAL, BLTZAL)，需要保存 PC+8  |
+| branch_type           | O    | 4         | 分支指令类型 (BEQ, BNE, BLEZ, etc.)             |
+| trap_type             | O    | 4         | 自陷指令类型 (TGE, TNE, etc.)                   |
+| cmov_type             | O    | CmovBus   | 条件传送指令类型 (MOVN, MOVZ)                   |
+| signsD                | O    | ctrl_sign | 输出的译码控制信号集合                          |
+| undefined_inst        | O    | 1         | 是否是未定义指令 (保留指令异常)                 |
+| syscall_inst          | O    | 1         | 是否是 SYSCALL 指令                             |
+| break_inst            | O    | 1         | 是否是 BREAK 指令                               |
+| eret_inst             | O    | 1         | 是否是 ERET 指令                                |
+| id_cpu                | O    | 1         | 是否是协处理器不可用异常 (CPUnavailable)        |
+| cop0_info_out         | O    | cop0_info | CP0 相关指令的操作信息 (读/写哪个 CP0 寄存器等) |
+
+#### **BP模块**
+
+| 端口名称       | 方向 | 位宽 | 功能描述                                   |
+| -------------- | ---- | ---- | ------------------------------------------ |
+| clk            | I    | 1    | 时钟信号                                   |
+| rst            | I    | 1    | 复位信号                                   |
+| enaD           | I    | 1    | D 阶段使能信号                             |
+| instrD         | I    | 32   | D 阶段的指令 (用于判断是否是分支指令)      |
+| pcD            | I    | 32   | D 阶段的 PC 值                             |
+| pc_plus4D      | I    | 32   | D 阶段的 PC + 4                            |
+| pcE            | I    | 32   | E 阶段的分支指令 PC 值                     |
+| branchE        | I    | 1    | E 阶段是否是分支指令                       |
+| actual_takeE   | I    | 1    | E 阶段分支指令的实际跳转结果               |
+| branchD        | O    | 1    | 输出，指示 D 阶段指令是否是分支指令        |
+| pred_takeD     | O    | 1    | 输出，D 阶段分支预测的结果（预测是否跳转） |
+| branch_targetD | O    | 32   | 输出，D 阶段分支预测的目标地址             |
+
+#### **Issue-ctrl**
+
+| 端口名称                | 方向 | 位宽 | 功能描述                                                     |
+| ----------------------- | ---- | ---- | ------------------------------------------------------------ |
+| D_master_ena            | I    | 1    | 输入，指示 D 阶段 Master 路径是否有效（通常为真）            |
+| D_mem_conflict          | I    | 1    | D 阶段检测到的访存结构冲突 (Master 和 Slave 都需要访存)      |
+| D_mul_conflict          | I    | 1    | D 阶段检测到的乘法单元结构冲突 (Master 和 Slave 都需要乘法)  |
+| D_div_conflict          | I    | 1    | D 阶段检测到的除法单元结构冲突 (Master 和 Slave 都需要除法)  |
+| E_master_memtoReg       | I    | 1    | E 阶段 Master 指令是否 Load (用于检测 Load-Use 冲突)         |
+| E_master_reg_waddr      | I    | 5    | E 阶段 Master 指令写回地址 (用于 Load-Use)                   |
+| E_slave_memtoReg        | I    | 1    | E 阶段 Slave 指令是否 Load (用于 Load-Use)                   |
+| E_slave_reg_waddr       | I    | 5    | E 阶段 Slave 指令写回地址 (用于 Load-Use)                    |
+| D_master_reg_wen        | I    | 1    | D 阶段 Master 指令是否写寄存器 (用于 RAW 检测)               |
+| D_master_reg_waddr      | I    | 5    | D 阶段 Master 指令写寄存器地址 (用于 RAW 检测)               |
+| D_slave_read_rs         | I    | 1    | D 阶段 Slave 指令是否读 rs                                   |
+| D_slave_read_rt         | I    | 1    | D 阶段 Slave 指令是否读 rt                                   |
+| D_slave_rs              | I    | 5    | D 阶段 Slave 指令的 rs 地址                                  |
+| D_slave_rt              | I    | 5    | D 阶段 Slave 指令的 rt 地址                                  |
+| D_master_hilowrite      | I    | 1    | D 阶段 Master 指令是否写 Hi/Lo 寄存器                        |
+| D_slave_hiloread        | I    | 1    | D 阶段 Slave 指令是否读 Hi/Lo 寄存器                         |
+| D_slave_hilowrite       | I    | 1    | D 阶段 Slave 指令是否写 Hi/Lo 寄存器                         |
+| D_master_cp0write       | I    | 1    | D 阶段 Master 指令是否写 CP0 寄存器                          |
+| D_slave_cp0read         | I    | 1    | D 阶段 Slave 指令是否读 CP0 寄存器                           |
+| D_master_is_branch      | I    | 1    | D 阶段 Master 指令是否是分支/跳转指令 (用于判断 Slave 是否在延迟槽) |
+| D_master_only_one_issue | I    | 1    | D 阶段 Master 指令是否是只能单发射的指令 (如 SYSCALL, ERET)  |
+| D_slave_only_one_issue  | I    | 1    | D 阶段 Slave 指令是否是只能单发射的指令 (如果出现在 Slave 路径) |
+| D_slave_may_bring_flush | I    | 1    | D 阶段 Slave 指令是否可能导致刷新 (通常指延迟槽中的跳转指令) |
+| fifo_empty              | I    | 1    | 指令 FIFO 是否为空                                           |
+| fifo_almost_empty       | I    | 1    | 指令 FIFO 是否几乎为空                                       |
+| D_slave_is_in_delayslot | O    | 1    | 输出，指示 D 阶段 Slave 指令是否被判断为处于延迟槽           |
+| D_slave_ena             | O    | 1    | 输出，控制 D 阶段 Slave 路径是否使能并发射指令到 E 阶段      |
 
 ### **5.3. 执行模块 (EX - Execute)**
 
-| 端口名称                             | 方向 | 位宽 | 功能描述                                                     |
-| :----------------------------------- | :--- | :--- | :----------------------------------------------------------- |
-| EX_Clk_I                             | I    | 1    | 时钟信号                                                     |
-| EX_Reset_I                           | I    | 1    | 复位信号                                                     |
-| **--- 输入来自 ID/EX 寄存器 ---**    |      |      | (这里使用 ID/EX 寄存器输出作为 EX 的输入)                    |
-| EX_PC_In_I[2]                        | I    | 32   | 输入的指令 PC 值。                                           |
-| EX_RS1Data_In_I[2]                   | I    | 32   | 输入的 rs1 数据 (可能来自寄存器堆或转发)。                   |
-| EX_RS2Data_In_I[2]                   | I    | 32   | 输入的 rs2 数据 (可能来自寄存器堆或转发)。                   |
-| EX_Immediate_In_I[2]                 | I    | 32   | 输入的立即数。                                               |
-| EX_RegWriteAddr_In_I[2]              | I    | 5    | 输入的目的寄存器地址 (rd)。                                  |
-| EX_ALUOp_In_I[2]                     | I    | ~4-6 | 输入的 ALU 操作控制信号。                                    |
-| EX_MemOp_In_I[2]                     | I    | ~3   | 输入的访存操作控制信号。                                     |
-| EX_RegWriteEnable_In_I[2]            | I    | 1    | 输入的写回使能信号。                                         |
-| EX_BranchCtrl_In_I[2]                | I    | ~3-4 | 输入的分支控制信号。                                         |
-| EX_CSROP_In_I                        | I    | ~2-3 | 输入的 CSR 操作控制信号 (**单发射**)。                       |
-| EX_CSRAddr_In_I                      | I    | 12   | 输入的 CSR 地址 (**单发射**)。                               |
-| **--- 转发输入 (来自 MEM/WB) ---**   |      |      |                                                              |
-| EX_ForwardData_MEM_I[2]              | I    | 32   | 来自 MEM 阶段的转发数据 (例如 Load 结果或 ALU 结果)。        |
-| EX_ForwardAddr_MEM_I[2]              | I    | 5    | 来自 MEM 阶段转发数据的目标寄存器地址。                      |
-| EX_ForwardValid_MEM_I[2]             | I    | 1    | 指示来自 MEM 阶段的转发数据是否有效。                        |
-| EX_ForwardData_WB_I[2]               | I    | 32   | 来自 WB 阶段的转发数据 (刚完成写回的数据)。                  |
-| EX_ForwardAddr_WB_I[2]               | I    | 5    | 来自 WB 阶段转发数据的目标寄存器地址。                       |
-| EX_ForwardValid_WB_I[2]              | I    | 1    | 指示来自 WB 阶段的转发数据是否有效。                         |
-| **--- 输出到 EX/MEM 寄存器 ---**     |      |      |                                                              |
-| EX_ALUResult_Out_O[2]                | O    | 32   | ALU 执行结果输出 (双发射宽度)。                              |
-| EX_MemAddr_Out_O[2]                  | O    | 32   | 访存指令的地址输出 (双发射宽度)。                            |
-| EX_MemWData_Out_O[2]                 | O    | 32   | 访存指令 (Store) 的写数据输出 (双发射宽度)。                 |
-| EX_MemOp_Out_O[2]                    | O    | ~3   | 访存操作类型输出，传递到 MEM 阶段 (双发射宽度)。             |
-| EX_MemReq_Out_O[2]                   | O    | 1    | 访存请求信号输出，指示当前指令是否为访存指令 (双发射宽度)。  |
-| EX_RegWData_Out_O[2]                 | O    | 32   | 需要写回寄存器的结果数据输出 (例如 ALU 结果，或者 CSR 读数据，双发射宽度)，传递到 EX/MEM (最终到 WB)。 |
-| EX_RegWEnable_Out_O[2]               | O    | 1    | 寄存器写使能信号输出 (双发射宽度)，传递到 EX/MEM。           |
-| EX_RegWAddr_Out_O[2]                 | O    | 5    | 寄存器写地址输出 (双发射宽度)，传递到 EX/MEM。               |
-| EX_CSRRdata_Out_O                    | O    | 32   | CSR 寄存器读数据输出 (**单发射宽度**)，用于 csrrw 等指令，传递到 EX/MEM (最终写回)。 |
-| **--- 分支结果输出 (反馈给 IF) ---** |      |      |                                                              |
-| EX_BranchTaken_Out_O                 | O    | 1    | 分支判断结果输出 (**单发射宽度**)，指示是否有分支发生跳转 (基于流水线中优先的那个分支指令)，用于 IF 阶段更新 PC 和 BP。 |
-| EX_BranchTargetAddr_Out_O            | O    | 32   | 分支目标地址输出 (**单发射宽度**)，如果 `EX_BranchTaken_Out_O` 为 1，则此为跳转目标地址，用于 IF 阶段更新 PC 和 BP。 |
-| **--- 转发输出 (给自身或 ID) ---**   |      |      |                                                              |
-| EX_ForwardALUResult_Out_O[2]         | O    | 32   | ALU 执行结果，用于数据转发 (双发射宽度)，旁路到后续指令的 EX 阶段输入。 |
-| EX_ForwardRegWData_Out_O[2]          | O    | 32   | 需要写回寄存器的数据 (例如 ALU 结果)，用于数据转发 (双发射宽度)。 |
-| EX_ForwardRegWAddr_Out_O[2]          | O    | 5    | 需要写回寄存器的目标地址，用于数据转发 (双发射宽度)。        |
-| **--- 流水线控制与异常 ---**         |      |      |                                                              |
-| EX_Stall_I                           | I    | 1    | 输入的停顿信号 (例如 MEM 阶段请求停顿)。                     |
-| EX_Stall_O                           | O    | 1    | 输出的停顿请求信号，指示 EX 阶段是否因为需要停顿 (例如，多周期操作未完成，虽然基本要求没有) 而请求停顿，传递给流水线控制逻辑。 |
-| EX_Flush_O                           | O    | 1    | 流水线冲刷信号输出，用于处理分支预测错误或异常，该信号由流水线控制逻辑生成，用于清空 IF 和 ID 阶段。 |
-| EX_ExceptionReq_O                    | O    | 1    | 异常请求信号输出，指示 EX 阶段检测到异常 (例如，除零错误)。  |
-| EX_ExceptionID_O                     | O    | ~4   | 异常 ID 输出，指示 EX 阶段检测到的异常类型。                 |
-| **--- 输出给BP分支预测器 ---**       |      |      |                                                              |
-| EX_Jump_ActualTaken_Out_O[2]         | O    | 1    | 输出指令是否为跳转指令并且成功跳转的布尔值（双发射宽度），传递给BP分支预测器 |
-| EX_PC_Jump_ActualTaken_Out_O         | O    | 32   | 输出成功跳转的指令的PC值，传递给BP分支预测器                 |
-
 ### **5.4. 访存模块 (MEM - Memory Access)**
 
-| 端口名称                           | 方向 | 位宽 | 功能描述                                                     |
-| :--------------------------------- | :--- | :--- | :----------------------------------------------------------- |
-| MEM_Clk_I                          | I    | 1    | 时钟信号                                                     |
-| MEM_Reset_I                        | I    | 1    | 复位信号                                                     |
-| **--- 输入来自 EX/MEM 寄存器 ---** |      |      | (这里使用 EX/MEM 寄存器输出作为 MEM 的输入)                  |
-| MEM_ALUResult_In_I[2]              | I    | 32   | 输入的来自 EX 阶段的 ALU 结果 (例如用于地址计算或非访存指令的结果)。 |
-| MEM_MemAddr_In_I[2]                | I    | 32   | 输入的访存地址。                                             |
-| MEM_MemWData_In_I[2]               | I    | 32   | 输入的 Store 指令写数据。                                    |
-| MEM_MemOp_In_I[2]                  | I    | ~3   | 输入的访存操作类型。                                         |
-| MEM_MemReq_In_I[2]                 | I    | 1    | 输入的访存请求信号。                                         |
-| MEM_RegWData_In_I[2]               | I    | 32   | 输入的需要写回寄存器的数据 (对于非 Load 指令，此数据直接来自 EX)。 |
-| MEM_RegWEnable_In_I[2]             | I    | 1    | 输入的写回使能信号。                                         |
-| MEM_RegWAddr_In_I[2]               | I    | 5    | 输入的写回目标寄存器地址。                                   |
-| **--- 数据存储器接口 ---**         |      |      |                                                              |
-| MEM_DataMemAddr_O[2]               | O    | 32   | 数据存储器地址输出 (双发射宽度)。**控制逻辑需处理单端口冲突。** |
-| MEM_DataMemWData_O[2]              | O    | 32   | 数据存储器写数据输出 (双发射宽度)。**控制逻辑需处理单端口冲突。** |
-| MEM_DataMemWEnable_O[2]            | O    | 1    | 数据存储器写使能输出 (双发射宽度, 通常根据 MemOp 决定)。**控制逻辑需处理单端口冲突。** |
-| MEM_DataMemReq_O[2]                | O    | 1    | 数据存储器请求信号输出 (双发射宽度, 基于 MemReq_In)。**控制逻辑需处理单端口冲突。** |
-| MEM_DataMemRdata_I[2]              | I    | 32   | 数据存储器读数据输入 (双发射宽度)。                          |
-| MEM_DataMemReady_I[2]              | I    | 1    | 数据存储器就绪信号输入 (双发射宽度)，用于处理不定周期访存。  |
-| **--- 输出到 MEM/WB 寄存器 ---**   |      |      |                                                              |
-| MEM_Rdata_Out_O[2]                 | O    | 32   | 读数据输出 (Load 指令的结果，双发射宽度)，传递到 MEM/WB 寄存器。 |
-| MEM_RegWData_Out_O[2]              | O    | 32   | 需要写回寄存器的结果数据输出 (双发射宽度)。对于 Load 指令，这是 `MEM_Rdata_Out_O`；对于其他指令，这是透传的 `MEM_RegWData_In_I`。传递到 MEM/WB。 |
-| MEM_RegWEnable_Out_O[2]            | O    | 1    | 寄存器写使能信号输出 (双发射宽度)，传递到 MEM/WB。           |
-| MEM_RegWAddr_Out_O[2]              | O    | 5    | 寄存器写地址输出 (双发射宽度)，传递到 MEM/WB。               |
-| **--- 转发输出 (给 EX) ---**       |      |      |                                                              |
-| MEM_ForwardRegWData_Out_O[2]       | O    | 32   | 需要写回寄存器的数据 (例如 Load 结果或 ALU 结果)，用于数据转发 (双发射宽度)，旁路到后续指令的 EX 阶段输入。 |
-| MEM_ForwardRegWAddr_Out_O[2]       | O    | 5    | 需要写回寄存器的目标地址，用于数据转发 (双发射宽度)。        |
-| **--- 流水线控制与异常 ---**       |      |      |                                                              |
-| MEM_Stall_I                        | I    | 1    | 输入的停顿信号 (例如 WB 阶段请求停顿，虽然少见)。            |
-| MEM_Stall_O                        | O    | 1    | 输出的停顿请求信号，指示 MEM 阶段是否因为等待资源 (例如，数据存储器未就绪 Data Cache Miss) 而请求停顿，传递给流水线控制逻辑。 |
-| MEM_ExceptionReq_O                 | O    | 1    | 异常请求信号输出，指示 MEM 阶段检测到异常 (例如，访存地址未对齐、页错误)。 |
-| MEM_ExceptionID_O                  | O    | ~4   | 异常 ID 输出，指示 MEM 阶段检测到的异常类型。                |
+| 端口名称         | 方向 | 位宽       | 功能描述                                              |
+| ---------------- | ---- | ---------- | ----------------------------------------------------- |
+| mem_en           | I    | 1          | M 阶段是否有访存操作                                  |
+| mem_op           | I    | 6          | M 阶段访存操作类型                                    |
+| mem_wdata        | I    | 32         | M 阶段需要写入 Cache 的数据                           |
+| mem_addr         | I    | 32         | M 阶段访存的物理地址或虚拟地址                        |
+| mem_rdata        | O    | 32         | 处理后的内存读取结果 (根据 Load 类型选择字节/半字/字) |
+| data_sram_rdata  | I    | 32         | 从数据 Cache 接口实际读回的数据                       |
+| data_sram_en     | O    | 1          | 输出到数据 Cache，指示是否进行访问                    |
+| data_sram_rlen   | O    | 2          | 输出到数据 Cache，读操作长度                          |
+| data_sram_wen    | O    | 4          | 输出到数据 Cache，写操作字节使能                      |
+| data_sram_addr   | O    | 32         | 输出到数据 Cache 的访问地址                           |
+| data_sram_wdata  | O    | 32         | 输出到数据 Cache 的写入数据                           |
+| M_master_mem_sel | I    | 1          | M 阶段是否选中 Master 路径访存                        |
+| M_slave_mem_sel  | I    | 1          | M 阶段是否选中 Slave 路径访存                         |
+| M_master_except  | I    | except_bus | M 阶段 Master 路径异常信息 (用于判断访存是否有效)     |
+| M_slave_except   | I    | except_bus | M 阶段 Slave 路径异常信息 (用于判断访存是否有效)      |
 
-### **5.5. 写回模块 (WB - Write Back)**
+### **5.5. 寄存器堆 (RF - Register File)**
 
-| 端口名称                           | 方向 | 位宽 | 功能描述                                                     |
-| :--------------------------------- | :--- | :--- | :----------------------------------------------------------- |
-| WB_Clk_I                           | I    | 1    | 时钟信号                                                     |
-| WB_Reset_I                         | I    | 1    | 复位信号                                                     |
-| **--- 输入来自 MEM/WB 寄存器 ---** |      |      | (这里使用 MEM/WB 寄存器输出作为 WB 的输入)                   |
-| WB_RegWData_In_I[2]                | I    | 32   | 输入的需要写回寄存器的数据 (双发射宽度)。                    |
-| WB_RegWEnable_In_I[2]              | I    | 1    | 输入的写回使能信号 (双发射宽度)。                            |
-| WB_RegWAddr_In_I[2]                | I    | 5    | 输入的写回目标寄存器地址 (双发射宽度)。                      |
-| **--- 寄存器堆写端口接口 ---**     |      |      | **(需要2个写端口: Instr0-rd, Instr1-rd)**                    |
-| WB_RF_WAddr_Instr0_Out_O           | O    | 5    | 寄存器堆写端口1地址输出，用于 **第一条指令 (Instr0)** 的 rd。 |
-| WB_RF_WData_Instr0_Out_O           | O    | 32   | 寄存器堆写端口1数据输出，用于 **第一条指令 (Instr0)**。      |
-| WB_RF_WEnable_Instr0_Out_O         | O    | 1    | 寄存器堆写端口1写使能输出，用于 **第一条指令 (Instr0)**。    |
-| WB_RF_WAddr_Instr1_Out_O           | O    | 5    | 寄存器堆写端口2地址输出，用于 **第二条指令 (Instr1)** 的 rd。 |
-| WB_RF_WData_Instr1_Out_O           | O    | 32   | 寄存器堆写端口2数据输出，用于 **第二条指令 (Instr1)**。      |
-| WB_RF_WEnable_Instr1_Out_O         | O    | 1    | 寄存器堆写端口2写使能输出，用于 **第二条指令 (Instr1)**。    |
-| **--- 流水线控制与异常 ---**       |      |      |                                                              |
-| WB_Stall_I                         | I    | 1    | 输入的停顿信号 (来自外部或调试逻辑，通常 WB 阶段不接收来自下游的停顿)。 |
-| WB_Stall_O                         | O    | 1    | 输出的停顿信号，指示 WB 阶段是否需要停顿 (例如，结构冒险 - 如果写端口冲突，但我们设计了2个写端口；或者等待调试)。该信号传递给流水线控制逻辑 (通常 WB 不主动请求停顿)。 |
-| WB_ExceptionReq_O                  | O    | 1    | 异常请求信号输出，指示 WB 阶段检测到异常 (例如，写回冲突 - 如果只有一个写端口，但在我们的设计中不应该发生)。 |
-| WB_ExceptionID_O                   | O    | ~4   | 异常 ID 输出，指示 WB 阶段检测到的异常类型。                 |
+| 端口名称 | 方向 | 位宽 | 功能描述                                                     |
+| -------- | ---- | ---- | ------------------------------------------------------------ |
+| clk      | I    | 1    | 时钟信号                                                     |
+| rst      | I    | 1    | 复位信号                                                     |
+| ra1_a    | I    | 5    | Master 路径读端口 1A 地址 (通常接 D_master_rs)               |
+| rd1_a    | O    | 32   | Master 路径读端口 1A 数据输出                                |
+| ra1_b    | I    | 5    | Master 路径读端口 1B 地址 (通常接 D_master_rt)               |
+| rd1_b    | O    | 32   | Master 路径读端口 1B 数据输出                                |
+| wen1     | I    | 1    | Master 路径写端口 1 使能 (来自 W 阶段，需检查 W_ena 和 W_master_except) |
+| wa1      | I    | 5    | Master 路径写端口 1 地址 (来自 W 阶段)                       |
+| wd1      | I    | 32   | Master 路径写端口 1 数据 (来自 W 阶段)                       |
+| ra2_a    | I    | 5    | Slave 路径读端口 2A 地址 (通常接 D_slave_rs)                 |
+| rd2_a    | O    | 32   | Slave 路径读端口 2A 数据输出                                 |
+| ra2_b    | I    | 5    | Slave 路径读端口 2B 地址 (通常接 D_slave_rt)                 |
+| rd2_b    | O    | 32   | Slave 路径读端口 2B 数据输出                                 |
+| wen2     | I    | 1    | Slave 路径写端口 2 使能 (来自 W 阶段，需检查 W_ena 和异常)   |
+| wa2      | I    | 5    | Slave 路径写端口 2 地址 (来自 W 阶段)                        |
+| wd2      | I    | 32   | Slave 路径写端口 2 数据 (来自 W 阶段)                        |
 
-### **5.6. 寄存器堆 (RF - Register File)**
+### **5.6. 控制单元模块 (CU - Control Unit - 流水线控制逻辑)**
 
-| 端口名称                     | 方向 | 位宽 | 功能描述                                    |
-| :--------------------------- | :--- | :--- | :------------------------------------------ |
-| RF_Clk_I                     | I    | 1    | 时钟信号                                    |
-| RF_Reset_I                   | I    | 1    | 复位信号                                    |
-| **--- 读端口 (共 4 个) ---** |      |      | (输入来自 ID 模块)                          |
-| RF_RAddr1_Instr0_In_I        | I    | 5    | 读端口1地址输入 (来自 ID, Instr0, rs1)。    |
-| RF_REnable1_Instr0_In_I      | I    | 1    | 读端口1使能输入 (来自 ID, Instr0)。         |
-| RF_RData1_Instr0_Out_O       | O    | 32   | 读端口1数据输出 (到 ID, Instr0, rs1 data)。 |
-| RF_RAddr2_Instr0_In_I        | I    | 5    | 读端口2地址输入 (来自 ID, Instr0, rs2)。    |
-| RF_REnable2_Instr0_In_I      | I    | 1    | 读端口2使能输入 (来自 ID, Instr0)。         |
-| RF_RData2_Instr0_Out_O       | O    | 32   | 读端口2数据输出 (到 ID, Instr0, rs2 data)。 |
-| RF_RAddr1_Instr1_In_I        | I    | 5    | 读端口3地址输入 (来自 ID, Instr1, rs1)。    |
-| RF_REnable1_Instr1_In_I      | I    | 1    | 读端口3使能输入 (来自 ID, Instr1)。         |
-| RF_RData1_Instr1_Out_O       | O    | 32   | 读端口3数据输出 (到 ID, Instr1, rs1 data)。 |
-| RF_RAddr2_Instr1_In_I        | I    | 5    | 读端口4地址输入 (来自 ID, Instr1, rs2)。    |
-| RF_REnable2_Instr1_In_I      | I    | 1    | 读端口4使能输入 (来自 ID, Instr1)。         |
-| RF_RData2_Instr1_Out_O       | O    | 32   | 读端口4数据输出 (到 ID, Instr1, rs2 data)。 |
-| **--- 写端口 (共 2 个) ---** |      |      | (输入来自 WB 模块)                          |
-| RF_WAddr_Instr0_In_I         | I    | 5    | 写端口1地址输入 (来自 WB, Instr0, rd)。     |
-| RF_WData_Instr0_In_I         | I    | 32   | 写端口1数据输入 (来自 WB, Instr0)。         |
-| RF_WEnable_Instr0_In_I       | I    | 1    | 写端口1写使能输入 (来自 WB, Instr0)。       |
-| RF_WAddr_Instr1_In_I         | I    | 5    | 写端口2地址输入 (来自 WB, Instr1, rd)。     |
-| RF_WData_Instr1_In_I         | I    | 32   | 写端口2数据输入 (来自 WB, Instr1)。         |
-| RF_WEnable_Instr1_In_I       | I    | 1    | 写端口2写使能输入 (来自 WB, Instr1)。       |
+| 端口名称           | 方向 | 位宽 | 功能描述                                            |
+| ------------------ | ---- | ---- | --------------------------------------------------- |
+| D_master_read_rs   | I    | 1    | D 阶段 Master 指令是否读取 rs 寄存器                |
+| D_master_read_rt   | I    | 1    | D 阶段 Master 指令是否读取 rt 寄存器                |
+| D_master_rs        | I    | 5    | D 阶段 Master 指令的 rs 寄存器地址                  |
+| D_master_rt        | I    | 5    | D 阶段 Master 指令的 rt 寄存器地址                  |
+| E_master_memtoReg  | I    | 1    | E 阶段 Master 指令是否是访存写回寄存器（Load 指令） |
+| E_master_reg_waddr | I    | 5    | E 阶段 Master 指令的写回寄存器地址                  |
+| E_slave_memtoReg   | I    | 1    | E 阶段 Slave 指令是否是访存写回寄存器（Load 指令）  |
+| E_slave_reg_waddr  | I    | 5    | E 阶段 Slave 指令的写回寄存器地址                   |
+| i_stall            | I    | 1    | 来自指令 Cache 或 FIFO 的暂停请求                   |
+| E_alu_stall        | I    | 1    | 来自 ALU（乘除法等）的暂停请求                      |
+| d_stall            | I    | 1    | 来自数据 Cache 或 MEM 阶段的暂停请求                |
+| M_except           | I    | 1    | M 阶段是否发生异常或中断需要跳转 (来自 CP0)         |
+| M_flush_all        | I    | 1    | M 阶段是否需要刷新整个流水线 (如 Cache fence)       |
+| E_bj               | I    | 1    | E 阶段是否发生分支/跳转（预测错误或延迟跳转）       |
+| D_bj               | I    | 1    | D 阶段是否发生分支/跳转（预测跳转或无冲突跳转）     |
+| F_ena              | O    | 1    | F 阶段使能信号，控制 F 阶段是否运行                 |
+| D_ena              | O    | 1    | D 阶段使能信号，控制 D 阶段是否运行                 |
+| E_ena              | O    | 1    | E 阶段使能信号，控制 E 阶段是否运行                 |
+| M_ena              | O    | 1    | M 阶段使能信号，控制 M 阶段是否运行                 |
+| W_ena              | O    | 1    | W 阶段使能信号，控制 W 阶段是否运行                 |
+| F_flush            | O    | 1    | F 阶段清空信号                                      |
+| D_flush            | O    | 1    | D 阶段清空信号                                      |
+| E_flush            | O    | 1    | E 阶段清空信号                                      |
+| M_flush            | O    | 1    | M 阶段清空信号                                      |
+| W_flush            | O    | 1    | W 阶段清空信号                                      |
+| delay_slot_flush   | O    | 1    | 是否需要特殊处理刷新延迟槽指令                      |
 
-### **5.7. 控制单元模块 (CU - Control Unit - 可作为流水线控制逻辑的一部分)**
+### **5.7. CSR 单元模块 (CSR Unit)**
 
-（待补充）
+| 端口名称      | 方向   | 位宽 | 功能描述                |
+| :------------ | :----- | :--- | :---------------------- |
+| clk           | I      | 1    | 时钟信号                |
+| resetn        | I      | 1    | 复位信号                |
+| csr_addr      | I      | 12   | CSR寄存器地址输入       |
+| csr_wdata     | I      | 32   | CSR写数据输入           |
+| csr_openable  | I      | 1    | CSR操作使能信号         |
+| csr_rdata     | O      | 32   | CSR读数据输出           |
+| mtc0_wen      | input  | 1    | MTC0写使能信号          |
+| mfc0_ren      | input  | 1    | MFC0读使能信号          |
+| csr_sel       | input  | 3    | 寄存器选择域            |
+| csr_rd        | input  | 5    | 寄存器编号              |
+| f_adel        | input  | 1    | 取指地址错异常          |
+| f_badvaddr    | input  | 32   | 取指阶段的错误PC地址    |
+| d_ri          | input  | 1    | 保留指令异常            |
+| d_syscall     | input  | 1    | 系统调用异常            |
+| d_break       | input  | 1    | Break指令异常           |
+| d_eret        | input  | 1    | ERET指令标识            |
+| e_ov          | input  | 1    | 算术溢出异常            |
+| e_tr          | input  | 1    | 自陷异常                |
+| m_tlbl        | input  | 1    | TLB加载异常             |
+| m_tlbs        | input  | 1    | TLB存储异常             |
+| m_adel        | input  | 1    | 加载地址错异常          |
+| m_ades        | input  | 1    | 存储地址错异常          |
+| m_mod         | input  | 1    | TLB修改异常             |
+| m_badvaddr    | input  | 32   | 访存阶段的错误地址      |
+| hw_int        | input  | 6    | 硬件中断线输入          |
+| timer_int     | input  | 1    | 计时器中断输入          |
+| in_delay_slot | input  | 1    | 当前指令在延迟槽标识    |
+| current_pc    | input  | 32   | 当前PC值（用于EPC记录） |
+| has_exception | output | 1    | 异常发生标志            |
+| ex_vector     | output | 32   | 异常向量地址            |
+| csr_eret      | output | 1    | ERET执行标志            |
+| entry_hi      | output | 32   | TLB查询/写入的高位地址  |
+| entry_lo0     | output | 32   | TLB项低位0              |
+| entry_lo1     | output | 32   | TLB项低位1              |
+| tlbp_index    | input  | 32   | TLB探测结果索引         |
 
-### **5.8. CSR 单元模块 (CSR Unit)**
-
-（待补充）
-
-### **5.9. 分支预测器模块 (BP - Branch Predictor)**
-
-| 端口名称                    | 方向 | 位宽 | 功能描述                                                     |
-| :-------------------------- | :--- | :--- | :----------------------------------------------------------- |
-| BP_Clk_I                    | I    | 1    | 时钟信号                                                     |
-| BP_Reset_I                  | I    | 1    | 复位信号                                                     |
-| **— 输入来自IF —**          |      |      |                                                              |
-| BP_PC_In_I[2]               | I    | 32   | 输入的来自IF模块的PC值，双发射宽度                           |
-| **— 输入来自EX —**          |      |      |                                                              |
-| BP_Jump_ActualTaken_In_I[2] | I    | 1    | 输出指令是否为跳转指令并且成功跳转的布尔值（双发射宽度），传递给BP分支预测器 |
-| BP_PC_Jump_ActualTaken_In_I | I    | 32   | 输出成功跳转的指令的PC值，传递给BP分支预测器                 |
-| **— 输出到IF —**            |      |      |                                                              |
-| BP_PC_Jump_Out_O            | O    | 32   | 输出给IF的跳转目标的PC值                                     |
-| BP_Jump_Enable_Out_O        | O    | 1    | 输出给IF的是否发生跳转的布尔值                               |
-| **--- 流水线控制 ---**      |      |      |                                                              |
-| BP_Stall_In_I               | I    | 1    | 输入的停顿信号，使预测器预测中断                             |
-
-### **5.10. 流水线寄存器 (Pipeline Registers)**
+### **5.8. 流水线寄存器 (Pipeline Registers)**
 
 流水线寄存器用于连接相邻的流水线阶段，传递指令和控制信息。它们是实现流水线的关键组件，需要包含时钟和复位信号，以及可能的清空逻辑（由 Flush 信号控制）。
 
-**5.10.1. IF/ID 寄存器组 (IF_ID_Reg)**
+**5.8.1. ID/EX 寄存器组 (ID_EX_Reg)**
 
-| 寄存器名称              | 位宽 | 功能描述                                                     |
-| :---------------------- | :--- | :----------------------------------------------------------- |
-| IF_ID_InstMemRdata_I[2] | 32   | 指令存储器数据输入 (每个发射槽位一个)。接收从指令存储器读取的指令。双发射宽度。 |
-| IF_ID_InstMemReady_I[2] | 1    | 指令存储器就绪信号输入 (每个发射槽位一个)。指示指令存储器是否准备好提供数据，用于处理不定周期访存。 |
-| IF_ID_Instr_O[2]        | 32   | 传递指令 (双发射宽度)。                                      |
-| IF_ID_PC_O[2]           | 32   | 传递指令的 PC 值 (双发射宽度)。                              |
-| IF_ID_Valid_O[2]        | 1    | 指令有效位 (双发射宽度)，由流水线控制逻辑控制，用于处理流水线气泡和停顿。 |
-| IF_ID_ExceptionReq_O    | 1    | 传递 IF 阶段的异常请求信号。                                 |
-| IF_ID_ExceptionID_O     | ~4   | 传递 IF 阶段的异常 ID。                                      |
-| *--- 控制信号 ---*      |      |                                                              |
-| IF_ID_Clk               | 1    | 时钟信号                                                     |
-| IF_ID_Reset             | 1    | 复位信号                                                     |
-| IF_ID_Flush             | 1    | 冲刷信号 (来自流水线控制逻辑)，用于清空寄存器内容 (通常将 Valid 置 0)。 |
-| IF_ID_Stall             | 1    | 停顿信号 (来自流水线控制逻辑)，用于保持寄存器内容不变。      |
+| 端口名称                 | 方向 | 位宽       | 功能描述                                                     |
+| ------------------------ | ---- | ---------- | ------------------------------------------------------------ |
+| clk                      | I    | 1          | 时钟信号                                                     |
+| rst                      | I    | 1          | 复位信号                                                     |
+| clear1                   | I    | 1          | Master 路径寄存器清空信号 (来自 M 阶段异常/刷新或 E 阶段非延迟槽刷新) |
+| clear2                   | I    | 1          | Slave 路径寄存器清空信号 (来自 M 阶段异常/刷新或 E 阶段刷新) |
+| ena1                     | I    | 1          | Master 路径寄存器使能 (E_ena)                                |
+| ena2                     | I    | 1          | Slave 路径寄存器使能 (D_slave_ena)                           |
+| D_master_ctrl_sign       | I    | ctrl_sign  | D 阶段 Master 路径控制信号                                   |
+| D_master_except          | I    | except_bus | D 阶段 Master 路径异常信号                                   |
+| D_master_cop0_info       | I    | cop0_info  | D 阶段 Master 路径 CP0 操作信息                              |
+| D_master_is_link_pc8     | I    | 1          | D 阶段 Master 指令是否需要链接 PC+8                          |
+| D_master_is_in_delayslot | I    | 1          | D 阶段 Master 指令是否在延迟槽                               |
+| D_master_is_branch       | I    | 1          | D 阶段 Master 指令是否是分支指令                             |
+| D_master_pred_take       | I    | 1          | D 阶段 Master 分支预测是否跳转                               |
+| D_master_jump_conflict   | I    | 1          | D 阶段 Master 跳转指令是否有冲突                             |
+| D_master_branch_type     | I    | 4          | D 阶段 Master 分支类型                                       |
+| D_master_trap_type       | I    | 4          | D 阶段 Master 自陷类型                                       |
+| D_master_rs              | I    | 5          | D 阶段 Master rs 地址                                        |
+| D_master_rt              | I    | 5          | D 阶段 Master rt 地址                                        |
+| D_master_reg_waddr       | I    | 5          | D 阶段 Master 写寄存器地址                                   |
+| D_master_op              | I    | 6          | D 阶段 Master opcode                                         |
+| D_master_cmov_type       | I    | CmovBus    | D 阶段 Master 条件传送类型                                   |
+| D_master_pc              | I    | 32         | D 阶段 Master PC 值                                          |
+| D_master_inst            | I    | 32         | D 阶段 Master 指令                                           |
+| D_master_rs_value        | I    | 32         | D 阶段 Master 前推后的 rs 值                                 |
+| D_master_rt_value        | I    | 32         | D 阶段 Master 前推后的 rt 值                                 |
+| D_master_imm_value       | I    | 32         | D 阶段 Master 立即数值                                       |
+| D_master_shamt_value     | I    | 32         | D 阶段 Master 移位量值                                       |
+| D_master_pc_plus4        | I    | 32         | D 阶段 Master PC+4 值                                        |
+| D_master_branch_target   | I    | 32         | D 阶段 Master 分支目标地址                                   |
+| D_slave_ctrl_sign        | I    | ctrl_sign  | D 阶段 Slave 路径控制信号                                    |
+| D_slave_except           | I    | except_bus | D 阶段 Slave 路径异常信号                                    |
+| D_slave_cop0_info        | I    | cop0_info  | D 阶段 Slave 路径 CP0 操作信息                               |
+| D_slave_is_in_delayslot  | I    | 1          | D 阶段 Slave 指令是否在延迟槽                                |
+| D_slave_rs               | I    | 5          | D 阶段 Slave rs 地址                                         |
+| D_slave_rt               | I    | 5          | D 阶段 Slave rt 地址                                         |
+| D_slave_reg_waddr        | I    | 5          | D 阶段 Slave 写寄存器地址                                    |
+| D_slave_op               | I    | 6          | D 阶段 Slave opcode                                          |
+| D_slave_cmov_type        | I    | CmovBus    | D 阶段 Slave 条件传送类型                                    |
+| D_slave_pc               | I    | 32         | D 阶段 Slave PC 值                                           |
+| D_slave_inst             | I    | 32         | D 阶段 Slave 指令                                            |
+| D_slave_rs_value         | I    | 32         | D 阶段 Slave 前推后的 rs 值                                  |
+| D_slave_rt_value         | I    | 32         | D 阶段 Slave 前推后的 rt 值                                  |
+| D_slave_imm_value        | I    | 32         | D 阶段 Slave 立即数值                                        |
+| D_slave_shamt_value      | I    | 32         | D 阶段 Slave 移位量值                                        |
+| E_master_ctrl_sign       | O    | ctrl_sign  | E 阶段 Master 路径控制信号                                   |
+| E_master_except          | O    | except_bus | E 阶段 Master 路径异常信号 (临时，未合并 ALU/MEM 异常)       |
+| E_master_cop0_info       | O    | cop0_info  | E 阶段 Master 路径 CP0 操作信息                              |
+| E_master_is_link_pc8     | O    | 1          | E 阶段 Master 指令是否需要链接 PC+8                          |
+| E_master_is_in_delayslot | O    | 1          | E 阶段 Master 指令是否在延迟槽                               |
+| E_master_is_branch       | O    | 1          | E 阶段 Master 指令是否是分支指令                             |
+| E_master_pred_take       | O    | 1          | E 阶段 Master 分支预测是否跳转                               |
+| E_master_jump_conflict   | O    | 1          | E 阶段 Master 跳转指令是否有冲突 (临时)                      |
+| E_master_branch_type     | O    | 4          | E 阶段 Master 分支类型                                       |
+| E_master_trap_type       | O    | 4          | E 阶段 Master 自陷类型                                       |
+| E_master_rs              | O    | 5          | E 阶段 Master rs 地址                                        |
+| E_master_rt              | O    | 5          | E 阶段 Master rt 地址                                        |
+| E_master_reg_waddr       | O    | 5          | E 阶段 Master 写寄存器地址                                   |
+| E_master_op              | O    | 6          | E 阶段 Master opcode                                         |
+| E_master_cmov_type       | O    | CmovBus    | E 阶段 Master 条件传送类型                                   |
+| E_master_pc              | O    | 32         | E 阶段 Master PC 值                                          |
+| E_master_inst            | O    | 32         | E 阶段 Master 指令                                           |
+| E_master_rs_value        | O    | 32         | E 阶段 Master rs 值                                          |
+| E_master_rt_value        | O    | 32         | E 阶段 Master rt 值                                          |
+| E_master_imm_value       | O    | 32         | E 阶段 Master 立即数值                                       |
+| E_master_shamt_value     | O    | 32         | E 阶段 Master 移位量值                                       |
+| E_master_pc_plus4        | O    | 32         | E 阶段 Master PC+4 值                                        |
+| E_master_branch_target   | O    | 32         | E 阶段 Master 分支目标地址                                   |
+| E_slave_ctrl_sign        | O    | ctrl_sign  | E 阶段 Slave 路径控制信号                                    |
+| E_slave_except           | O    | except_bus | E 阶段 Slave 路径异常信号 (临时)                             |
+| E_slave_cop0_info        | O    | cop0_info  | E 阶段 Slave 路径 CP0 操作信息                               |
+| E_slave_is_in_delayslot  | O    | 1          | E 阶段 Slave 指令是否在延迟槽                                |
+| E_slave_rs               | O    | 5          | E 阶段 Slave rs 地址                                         |
+| E_slave_rt               | O    | 5          | E 阶段 Slave rt 地址                                         |
+| E_slave_reg_waddr        | O    | 5          | E 阶段 Slave 写寄存器地址                                    |
+| E_slave_op               | O    | 6          | E 阶段 Slave opcode                                          |
+| E_slave_cmov_type        | O    | CmovBus    | E 阶段 Slave 条件传送类型                                    |
+| E_slave_pc               | O    | 32         | E 阶段 Slave PC 值                                           |
+| E_slave_inst             | O    | 32         | E 阶段 Slave 指令                                            |
+| E_slave_rs_value         | O    | 32         | E 阶段 Slave rs 值                                           |
+| E_slave_rt_value         | O    | 32         | E 阶段 Slave rt 值                                           |
+| E_slave_imm_value        | O    | 32         | E 阶段 Slave 立即数值                                        |
+| E_slave_shamt_value      | O    | 32         | E 阶段 Slave 移位量值                                        |
 
-**5.10.2. ID/EX 寄存器组 (ID_EX_Reg)**
+**5.8.2. EX/MEM 寄存器组 (EX_MEM_Reg)**
 
-| 寄存器名称                | 位宽 | 功能描述                                    |
-| :------------------------ | :--- | :------------------------------------------ |
-| ID_EX_Instr_O[2]          | 32   | 传递指令 (可选，用于调试/异常)。            |
-| ID_EX_PC_O[2]             | 32   | 传递指令的 PC 值。                          |
-| ID_EX_RS1Data_O[2]        | 32   | 传递 rs1 操作数数据。                       |
-| ID_EX_RS2Data_O[2]        | 32   | 传递 rs2 操作数数据。                       |
-| ID_EX_Immediate_O[2]      | 32   | 传递立即数。                                |
-| ID_EX_RegWriteAddr_O[2]   | 5    | 传递目的寄存器地址 (rd)。                   |
-| ID_EX_ALUOp_O[2]          | ~4-6 | 传递 ALU 操作控制信号。                     |
-| ID_EX_MemOp_O[2]          | ~3   | 传递访存操作控制信号。                      |
-| ID_EX_RegWriteEnable_O[2] | 1    | 传递写回使能信号。                          |
-| ID_EX_BranchCtrl_O[2]     | ~3-4 | 传递分支控制信号。                          |
-| ID_EX_CSROP_O             | ~2-3 | 传递 CSR 操作控制信号 (**单发射**)。        |
-| ID_EX_CSRAddr_O           | 12   | 传递 CSR 地址 (**单发射**)。                |
-| ID_EX_Valid_O[2]          | 1    | 指令有效位 (双发射宽度)。                   |
-| ID_EX_ExceptionReq_O      | 1    | 传递 ID 阶段的异常请求信号 (或来自 IF/ID)。 |
-| ID_EX_ExceptionID_O       | ~4   | 传递 ID 阶段的异常 ID (或来自 IF/ID)。      |
-| *--- 控制信号 ---*        |      |                                             |
-| ID_EX_Clk                 | 1    | 时钟信号                                    |
-| ID_EX_Reset               | 1    | 复位信号                                    |
-| ID_EX_Flush               | 1    | 冲刷信号。                                  |
-| ID_EX_Stall               | 1    | 停顿信号。                                  |
+| 端口名称                  | 方向 | 位宽       | 功能描述                                             |
+| ------------------------- | ---- | ---------- | ---------------------------------------------------- |
+| clk                       | I    | 1          | 时钟信号                                             |
+| rst                       | I    | 1          | 复位信号                                             |
+| clear1                    | I    | 1          | Master 路径寄存器清空信号 (M_flush)                  |
+| clear2                    | I    | 1          | Slave 路径寄存器清空信号 (M_flush)                   |
+| ena1                      | I    | 1          | Master 路径寄存器使能 (M_ena)                        |
+| ena2                      | I    | 1          | Slave 路径寄存器使能 (M_ena)                         |
+| E_mem_en                  | I    | 1          | E 阶段是否有访存操作                                 |
+| E_mem_ren                 | I    | 1          | E 阶段是否读内存                                     |
+| E_mem_wen                 | I    | 1          | E 阶段是否写内存                                     |
+| E_mem_op                  | I    | 6          | E 阶段访存操作类型                                   |
+| E_mem_addr                | I    | 32         | E 阶段访存物理地址 (?) 或虚拟地址                    |
+| E_mem_wdata               | I    | 32         | E 阶段写内存数据                                     |
+| E_mem_va                  | I    | 32         | E 阶段访存虚拟地址                                   |
+| M_mem_en                  | O    | 1          | M 阶段是否有访存操作                                 |
+| M_mem_ren                 | O    | 1          | M 阶段是否读内存                                     |
+| M_mem_wen                 | O    | 1          | M 阶段是否写内存                                     |
+| M_mem_op                  | O    | 6          | M 阶段访存操作类型                                   |
+| M_mem_addr                | O    | 32         | M 阶段访存物理地址 (?) 或虚拟地址                    |
+| M_mem_wdata               | O    | 32         | M 阶段写内存数据                                     |
+| M_mem_va                  | O    | 32         | M 阶段访存虚拟地址                                   |
+| E_master_ctrl_sign        | I    | ctrl_sign  | E 阶段 Master 路径控制信号                           |
+| E_master_except           | I    | except_bus | E 阶段 Master 路径最终异常信号 (合并了 ALU/MEM 异常) |
+| E_master_reg_wen          | I    | 1          | E 阶段 Master 指令是否写寄存器                       |
+| E_master_mem_sel          | I    | 1          | E 阶段是否选中 Master 访存                           |
+| E_master_is_in_delayslot  | I    | 1          | E 阶段 Master 指令是否在延迟槽                       |
+| E_master_reg_waddr        | I    | 5          | E 阶段 Master 写寄存器地址                           |
+| E_master_inst             | I    | 32         | E 阶段 Master 指令                                   |
+| E_master_alu_res          | I    | 32         | E 阶段 Master ALU 结果                               |
+| E_master_pc               | I    | 32         | E 阶段 Master PC 值                                  |
+| E_slave_ctrl_sign         | I    | ctrl_sign  | E 阶段 Slave 路径控制信号                            |
+| E_slave_except            | I    | except_bus | E 阶段 Slave 路径最终异常信号                        |
+| E_slave_reg_wen           | I    | 1          | E 阶段 Slave 指令是否写寄存器                        |
+| E_slave_mem_sel           | I    | 1          | E 阶段是否选中 Slave 访存                            |
+| E_slave_is_in_delayslot   | I    | 1          | E 阶段 Slave 指令是否在延迟槽                        |
+| E_slave_reg_waddr         | I    | 5          | E 阶段 Slave 写寄存器地址                            |
+| E_slave_pc                | I    | 32         | E 阶段 Slave PC 值                                   |
+| E_slave_inst              | I    | 32         | E 阶段 Slave 指令                                    |
+| E_slave_alu_res           | I    | 32         | E 阶段 Slave ALU 结果                                |
+| M_master_ctrl_sign        | O    | ctrl_sign  | M 阶段 Master 路径控制信号                           |
+| M_master_except           | O    | except_bus | M 阶段 Master 路径异常信号 (临时，未合并 TLB 异常)   |
+| M_master_reg_wen          | O    | 1          | M 阶段 Master 指令是否写寄存器                       |
+| M_master_mem_sel          | O    | 1          | M 阶段是否选中 Master 访存                           |
+| M_master_is_in_delayslot  | O    | 1          | M 阶段 Master 指令是否在延迟槽                       |
+| M_master_reg_waddr        | O    | 5          | M 阶段 Master 写寄存器地址                           |
+| M_master_inst             | O    | 32         | M 阶段 Master 指令                                   |
+| M_master_alu_res          | O    | 32         | M 阶段 Master ALU 结果                               |
+| M_master_pc               | O    | 32         | M 阶段 Master PC 值                                  |
+| M_slave_ctrl_sign         | O    | ctrl_sign  | M 阶段 Slave 路径控制信号                            |
+| M_slave_except            | O    | except_bus | M 阶段 Slave 路径异常信号 (临时)                     |
+| M_slave_reg_wen           | O    | 1          | M 阶段 Slave 指令是否写寄存器                        |
+| M_slave_mem_sel           | O    | 1          | M 阶段是否选中 Slave 访存                            |
+| M_slave_is_in_delayslot   | O    | 1          | M 阶段 Slave 指令是否在延迟槽                        |
+| M_slave_reg_waddr         | O    | 5          | M 阶段 Slave 写寄存器地址                            |
+| M_slave_pc                | O    | 32         | M 阶段 Slave PC 值                                   |
+| M_slave_inst              | O    | 32         | M 阶段 Slave 指令                                    |
+| M_slave_alu_res           | O    | 32         | M 阶段 Slave ALU 结果                                |
+| E_master_debug_cp0_count  | I    | 32         | E 阶段 Master CP0 Count 调试值                       |
+| E_master_debug_cp0_random | I    | 32         | E 阶段 Master CP0 Random 调试值                      |
+| E_master_debug_cp0_cause  | I    | 32         | E 阶段 Master CP0 Cause 调试值                       |
+| M_master_debug_cp0_count  | O    | 32         | M 阶段 Master CP0 Count 调试值                       |
+| M_master_debug_cp0_random | O    | 32         | M 阶段 Master CP0 Random 调试值                      |
+| M_master_debug_cp0_cause  | O    | 32         | M 阶段 Master CP0 Cause 调试值                       |
 
-**5.10.3. EX/MEM 寄存器组 (EX_MEM_Reg)**
+**5.8.3. MEM/WB 寄存器组 (MEM_WB_Reg)**
 
-| 寄存器名称             | 位宽 | 功能描述                                            |
-| :--------------------- | :--- | :-------------------------------------------------- |
-| EX_MEM_PC_O[2]         | 32   | 传递指令的 PC 值 (主要用于异常处理)。               |
-| EX_MEM_ALUResult_O[2]  | 32   | 传递 ALU 执行结果。                                 |
-| EX_MEM_MemAddr_O[2]    | 32   | 传递访存地址。                                      |
-| EX_MEM_MemWData_O[2]   | 32   | 传递 Store 指令的写数据。                           |
-| EX_MEM_MemOp_O[2]      | ~3   | 传递访存操作类型。                                  |
-| EX_MEM_MemReq_O[2]     | 1    | 传递访存请求信号。                                  |
-| EX_MEM_RegWData_O[2]   | 32   | 传递需要写回寄存器的数据 (对于非访存指令)。         |
-| EX_MEM_RegWEnable_O[2] | 1    | 传递写回使能信号。                                  |
-| EX_MEM_RegWAddr_O[2]   | 5    | 传递写回目标寄存器地址。                            |
-| EX_MEM_CSRRdata_O      | 32   | 传递 CSR 读取数据 (**单发射**)。                    |
-| EX_MEM_Valid_O[2]      | 1    | 指令有效位 (双发射宽度)。                           |
-| EX_MEM_ExceptionReq_O  | 1    | 传递 EX 阶段的异常请求信号 (或来自 ID/EX)。         |
-| EX_MEM_ExceptionID_O   | ~4   | 传递 EX 阶段的异常 ID (或来自 ID/EX)。              |
-| *--- 控制信号 ---*     |      |                                                     |
-| EX_MEM_Clk             | 1    | 时钟信号                                            |
-| EX_MEM_Reset           | 1    | 复位信号                                            |
-| EX_MEM_Flush           | 1    | 冲刷信号 (通常 EX/MEM 不会被冲刷，除非有特殊设计)。 |
-| EX_MEM_Stall           | 1    | 停顿信号。                                          |
-
-**5.10.4. MEM/WB 寄存器组 (MEM_WB_Reg)**
-
-| 寄存器名称             | 位宽 | 功能描述                                                     |
-| :--------------------- | :--- | :----------------------------------------------------------- |
-| MEM_WB_PC_O[2]         | 32   | 传递指令的 PC 值 (主要用于异常处理)。                        |
-| MEM_WB_Rdata_O[2]      | 32   | 传递 Load 指令读取的数据。                                   |
-| MEM_WB_RegWData_O[2]   | 32   | 传递最终需要写回寄存器的数据 (可能是 ALU 结果、Load 结果或 CSR 结果)。 |
-| MEM_WB_RegWEnable_O[2] | 1    | 传递写回使能信号。                                           |
-| MEM_WB_RegWAddr_O[2]   | 5    | 传递写回目标寄存器地址。                                     |
-| MEM_WB_Valid_O[2]      | 1    | 指令有效位 (双发射宽度)。                                    |
-| MEM_WB_ExceptionReq_O  | 1    | 传递 MEM 阶段的异常请求信号 (或来自 EX/MEM)。                |
-| MEM_WB_ExceptionID_O   | ~4   | 传递 MEM 阶段的异常 ID (或来自 EX/MEM)。                     |
-| *--- 控制信号 ---*     |      |                                                              |
-| MEM_WB_Clk             | 1    | 时钟信号                                                     |
-| MEM_WB_Reset           | 1    | 复位信号                                                     |
-| MEM_WB_Flush           | 1    | 冲刷信号 (通常 MEM/WB 不会被冲刷)。                          |
-| MEM_WB_Stall           | 1    | 停顿信号 (通常 MEM/WB 不会停顿下游)。                        |
-
-### **5.11. 异常处理单元 (EHU - Exception Handling Unit)**
-
-（待补充）
+| 端口名称                  | 方向 | 位宽       | 功能描述                                         |
+| ------------------------- | ---- | ---------- | ------------------------------------------------ |
+| clk                       | I    | 1          | 时钟信号                                         |
+| rst                       | I    | 1          | 复位信号                                         |
+| clear1                    | I    | 1          | Master 路径寄存器清空信号 (W_flush)              |
+| clear2                    | I    | 1          | Slave 路径寄存器清空信号 (W_flush)               |
+| ena1                      | I    | 1          | Master 路径寄存器使能 (W_ena)                    |
+| ena2                      | I    | 1          | Slave 路径寄存器使能 (W_ena)                     |
+| M_master_except           | I    | except_bus | M 阶段 Master 路径异常信号                       |
+| M_master_reg_wen          | I    | 1          | M 阶段 Master 指令是否写寄存器                   |
+| M_master_reg_waddr        | I    | 5          | M 阶段 Master 写寄存器地址                       |
+| M_master_inst             | I    | 32         | M 阶段 Master 指令                               |
+| M_master_pc               | I    | 32         | M 阶段 Master PC 值                              |
+| M_master_reg_wdata        | I    | 32         | M 阶段 Master 写寄存器数据 (访存结果或 ALU 结果) |
+| M_slave_except            | I    | except_bus | M 阶段 Slave 路径异常信号                        |
+| M_slave_reg_wen           | I    | 1          | M 阶段 Slave 指令是否写寄存器                    |
+| M_slave_reg_waddr         | I    | 5          | M 阶段 Slave 写寄存器地址                        |
+| M_slave_inst              | I    | 32         | M 阶段 Slave 指令                                |
+| M_slave_pc                | I    | 32         | M 阶段 Slave PC 值                               |
+| M_slave_reg_wdata         | I    | 32         | M 阶段 Slave 写寄存器数据 (访存结果或 ALU 结果)  |
+| W_master_except           | O    | except_bus | W 阶段 Master 路径异常信号                       |
+| W_master_reg_wen          | O    | 1          | W 阶段 Master 指令是否写寄存器                   |
+| W_master_reg_waddr        | O    | 5          | W 阶段 Master 写寄存器地址                       |
+| W_master_inst             | O    | 32         | W 阶段 Master 指令                               |
+| W_master_pc               | O    | 32         | W 阶段 Master PC 值                              |
+| W_master_reg_wdata        | O    | 32         | W 阶段 Master 写寄存器数据                       |
+| W_slave_except            | O    | except_bus | W 阶段 Slave 路径异常信号                        |
+| W_slave_reg_wen           | O    | 1          | W 阶段 Slave 指令是否写寄存器                    |
+| W_slave_reg_waddr         | O    | 5          | W 阶段 Slave 写寄存器地址                        |
+| W_slave_inst              | O    | 32         | W 阶段 Slave 指令                                |
+| W_slave_pc                | O    | 32         | W 阶段 Slave PC 值                               |
+| W_slave_reg_wdata         | O    | 32         | W 阶段 Slave 写寄存器数据                        |
+| M_master_debug_cp0_count  | I    | 32         | M 阶段 Master CP0 Count 调试值                   |
+| M_master_debug_cp0_random | I    | 32         | M 阶段 Master CP0 Random 调试值                  |
+| M_master_debug_cp0_cause  | I    | 32         | M 阶段 Master CP0 Cause 调试值                   |
+| M_master_debug_int        | I    | 1          | M 阶段 Master 是否发生中断异常                   |
+| W_master_debug_cp0_count  | O    | 32         | W 阶段 Master CP0 Count 调试值                   |
+| W_master_debug_cp0_random | O    | 32         | W 阶段 Master CP0 Random 调试值                  |
+| W_master_debug_cp0_cause  | O    | 32         | W 阶段 Master CP0 Cause 调试值                   |
+| W_master_debug_int        | O    | 1          | W 阶段 Master 是否发生中断异常                   |
 
 ## **6. 模块内部功能描述**
 
-### **6.1. 指令取指模块 (IF)**
+### **IF部分**
 
-*   **指令地址生成 (Instruction Address Generation):**  根据当前 PC 值和分支预测结果, 生成下一条指令的地址。
-*   **指令缓存 (Instruction Cache) (可选):**  基本功能要求中可简化为直接访问指令存储器, 后续可添加 I-Cache。
-*   **指令存储器接口 (Instruction Memory Interface):**  与指令存储器交互, 发送地址请求, 接收指令数据。支持不定周期访存, 需要处理 `req` 和 `ready` 信号。
-*   **分支预测接口 (Branch Prediction Interface):**  与分支预测器交互, 获取分支预测结果。
-*   **指令获取 (Instruction Fetching):**  从指令存储器获取指令, 并缓存到 IF 阶段寄存器。
-*   **PC 更新 (PC Update):**  根据指令类型 (顺序执行、分支跳转、异常入口) 更新 PC 值。
-*   **异常检测 (Exception Detection):**  检测取指阶段的异常, 例如指令地址未对齐 (Instruction Address Misaligned)。
-*   **停顿和冲刷处理 (Stall and Flush Handling):**  响应流水线控制逻辑的停顿和冲刷信号。
+一、双发射基础架构
 
-### **6.2. 指令译码模块 (ID)**
+1、双端口指令Cache：数据行为64bit（2条32位指令），支持同时获取两条指令
 
-*   **指令解码 (Instruction Decode):**  解析指令的 opcode、funct3、funct7 等字段, 识别指令类型。
-*   **寄存器读取 (Register Read):**  根据指令的 rs1 和 rs2 字段, 从寄存器堆读取操作数。
-*   **立即数提取 (Immediate Extraction):**  提取指令中的立即数字段。
-*   **控制信号生成 (Control Signal Generation):**  根据指令类型, 生成执行阶段需要的控制信号 (例如, ALU 操作类型、访存操作类型、写回使能等)。
-*   **数据冒险检测 (Data Hazard Detection):**  检测数据冒险 (RAW, WAR, WAW), 并将冒险信息传递给流水线控制逻辑。
-*   **结构冒险检测 (Structural Hazard Detection) (可选):**  检测结构冒险 (例如, 资源冲突), 并将冒险信息传递给流水线控制逻辑。
-*   **异常检测 (Exception Detection):**  检测译码阶段的异常, 例如非法指令 (Illegal Instruction)。
-*   **停顿和冲刷处理 (Stall and Flush Handling):**  响应流水线控制逻辑的停顿和冲刷信号。
+2、指令FIFO：作为取指与后续阶段的缓冲区，深度为16条目
 
-### **6.3. 执行模块 (EX)**
+3、双读双写机制：支持同时写入/读取两条指令
 
-*   **ALU 执行单元 (ALU Execution Unit):**  实现算术逻辑运算、比较运算等。至少包含两个 ALU 单元, 支持并行执行。
-*   **分支处理单元 (Branch Processing Unit):**  计算分支指令的条件判断结果, 计算分支目标地址。
-*   **访存地址计算 (Memory Address Calculation):**  计算 load 和 store 指令的有效地址。
-*   **执行结果生成 (Execution Result Generation):**  生成 ALU 运算结果、访存地址、访存数据、寄存器写回数据等。
-*   **数据转发逻辑 (Data Forwarding Logic) (可选):**  实现数据转发路径, 将 EX 阶段的结果旁路转发到后续指令的 EX 阶段。
-*   **CSR 操作 (CSR Operation):**  执行 CSR 指令, 与 CSR 单元交互进行 CSR 寄存器的读写。
-*   **异常检测 (Exception Detection):**  检测执行阶段的异常, 例如除零错误 (Division by Zero)。
-*   **停顿和冲刷处理 (Stall and Flush Handling):**  响应流水线控制逻辑的停顿和冲刷信号。
+ 
 
-### **6.4. 访存模块 (MEM)**
+二、关键组件
 
-*   **地址访问 (Address Access):**  根据 EX 阶段提供的地址, 访问数据存储器。
-*   **数据读写 (Data Read/Write):**  执行 load 指令的读操作, store 指令的写操作。
-*   **数据缓存 (Data Cache) (可选):**  基本功能要求中可简化为直接访问数据存储器, 后续可添加 D-Cache。
-*   **数据存储器接口 (Data Memory Interface):**  与数据存储器交互, 发送地址、数据和控制信号, 接收读数据和就绪信号。支持不定周期访存, 需要处理 `req` 和 `ready` 信号。
-*   **数据返回 (Data Return):**  将从数据存储器读取的数据传递到 WB 阶段。
-*   **数据转发逻辑 (Data Forwarding Logic) (可选):**  实现数据转发路径, 将 MEM 阶段的 load 数据旁路转发到后续指令的 EX 阶段。
-*   **异常检测 (Exception Detection):**  检测访存阶段的异常, 例如访存地址未对齐 (Memory Address Misaligned)、页错误 (Page Fault)。
-*   **停顿和冲刷处理 (Stall and Flush Handling):**  响应流水线控制逻辑的停顿和冲刷信号。
+1、pc_reg
 
-### **6.5. 写回模块 (WB)**
+根据双发射情况动态计算下一条PC值：
 
-*   **结果选择 (Result Selection):**  选择需要写回寄存器的结果 (来自 EX 或 MEM 阶段)。
-*   **寄存器写入 (Register Write Back):**  将结果写回寄存器堆的指定寄存器地址。
-*   **异常检测 (Exception Detection):**  检测写回阶段的异常 (例如，写回冲突，虽然在基本流水线中通常不会出现)。
-*   **停顿和冲刷处理 (Stall and Flush Handling):**  响应流水线控制逻辑的停顿和冲刷信号 (通常 WB 阶段不需要停顿)。
+双指令就绪(F_inst_data_ok1 & F_inst_data_ok2)：PC+8
 
-## **7. 指令集架构支持 (ISA Support)**
+单指令就绪(F_inst_data_ok1)：PC+4
 
-### **7.1. RV32I 指令集 (RV32I Spec)**
+ 
 
-*   该处理器需要完整支持 RV32I 基本整数指令集
+2、指令Cache
 
-### **7.2. CSR 指令和寄存器 (CSR Spec)**
+64bit数据行：对应两条32位指令
 
-*   支持 `csrrw` 指令用于 CSR 寄存器的读写。
-*   实现 `mtime` (Machine Time) 和 `mcycle` (Machine Cycle) 两个 CSR 寄存器。
+双返回信号：
 
-## **8. 分支预测机制 (Branch Predictor)**
+inst_data_ok1：第一条指令有效
 
-### **8.1. Bi-mode 分支预测器 (Bi-mode Branch Predictor)**
+inst_data_ok2：第二条指令有效
 
-*   采用 Bi-mode 分支预测器, 以提高分支预测的准确率。
-*   预测器需要考虑分支指令的历史信息和当前行为, 进行动态预测。
-*   （待补充）
+边界处理：当PC指向Cache行末尾时，只返回1条有效指令
 
-## **9. 存储器子系统 (Memory Subsystem)**
+ 
 
-### **9.1. 基本存储器模型**
+3、指令FIFO
 
-*   基本功能要求下, 假设指令存储器和数据存储器均为单周期访问 (可通过设置外部存储器模块实现单周期响应)。
-*   存储器接口需要支持指令读取和数据读写操作，并包含请求和就绪信号以支持不定周期访存。
-*   （待补充）
+双写入机制：
 
-## **10. 性能目标 (Performance Goals)**
+ if(write_en1) lines[write_pointer] <= write_line1;
 
-### **10.1. Drystone 测试 (Drystone)**
+ if(write_en2) lines[write_pointer+1] <= write_line2;
 
-*   处理器需要能够成功运行 Drystone 基准测试程序。
-*   Drystone 测试结果可以作为衡量处理器基本功能和性能的指标。
+双读取机制：
 
-## **11. 缩略语:**
+ read_line1 = lines[read_pointer];
 
-*   ISA: 指令集架构 (Instruction Set Architecture)
-*   RV32I: RISC-V 32 位整数指令集基础规范
-*   CSR: 控制状态寄存器 (Control and Status Register)
-*   ALU: 算术逻辑单元 (Arithmetic Logic Unit)
-*   PC: 程序计数器 (Program Counter)
-*   IF: 取指 (Instruction Fetch)
-*   ID: 译码 (Instruction Decode)
-*   EX: 执行 (Execute)
-*   MEM: 访存 (Memory Access)
-*   WB: 写回 (Write Back)
-*   EHU: 异常处理单元 (Exception Handling Unit)
+ read_line2 = lines[read_pointer + 1];
+
+状态管理：
+
+full：阻止继续取指
+
+empty：阻止后续发射
+
+almost_empty：只有1条指令时可发射master
+
+ 
+
+三、双发射控制逻辑
+
+1、正常双发射条件：
+
+FIFO中有≥2条指令(data_count ≥ 2)
+
+无结构冲突/数据冲突
+
+无异常/分支跳转
+
+ 
+
+2、发射判断逻辑
+
+在issueCtrl模块中实现
+
+if(almost_empty) begin
+
+  // 只能发射master
+
+  read_en1 = 1; read_en2 = 0;
+
+end else begin
+
+  // 可双发射
+
+  read_en1 = 1; read_en2 = 1;
+
+end
+
+ 
+
+3、延迟槽特殊处理
+
+当检测到分支指令时：
+
+ 当前发射的第一条指令作为延迟槽指令
+
+ 设置master_is_in_delayslot_o标志
+
+ 通过delayslot_line缓存延迟槽指令
+
+ 
+
+4、异常处理机制
+
+优先级设计：
+
+  复位 > 异常 > 冲刷 > 分支跳转 > 正常取指
+
+  if (rst) pc_next = 32'hbfc00000;
+
+  else if (M_except) pc_next = M_except_addr;
+
+  else if (M_flush_all) pc_next = M_flush_all_addr;
+
+  else if (E_bj) pc_next = E_bj_target;
+
+  ...
+
+精确异常：
+
+  异常发生时记录准确PC
+
+  通过EPC寄存器保存异常现场
+
+
+
+CPU每个时钟周期：
+
+1、从指令Cache获取最多两条指令
+
+2、将指令存入FIFO缓冲区
+
+3、根据流水线状态决定发射1条或2条指令
+
+4、正确处理各种异常和分支情况
+
+
+
+### **ID部分**
+
+![16fd0d3142e275a3ec00d1ea7481296b](C:\Users\music\Documents\xwechat_files\wxid_myhf964qcxfw32_5e20\temp\2025-04\RWTemp\cc8532945a8b386258e244a1ef30a5e4\16fd0d3142e275a3ec00d1ea7481296b.png)
+
+### **EX部分**
+
+4 FU；基础ALU、读写的FU、FPU、机动的一个FU（用于其他指令或者增加并行）。正常ALU和接口已完成，FPU已设计完成了浮点的乘法、累加、转换
+
+
+
+### **MEM部分**
+
+**MEM****模块设计思路整理**
+
+**一、模块职责**
+
+MEM模块主要实现访存控制（包括异常处理的模块，可以包括访存仲裁模块?），与写回数据的选择。
+
+我的设计中，考虑分为如下模块：master与slave的仲裁处理(待定)，异常检测与处理（主要是地址对齐
+
+检查），指令数据的处理（分为load与非load模块），转发与旁路，流水线控制（阻塞与冲刷信号）。
+
+**二、关键子模块设计**
+
+**1.** **访存仲裁单元**
+
+• 功能：处理双发射路径（Master/Slave）的访存冲突。
+
+• 处理方式：
+
+若Master和Slave同时请求访存（如均需使用Cache），优先处理Master请求，阻塞Slave。(一般情况下
+
+不会发生，发生时进行处理)
+
+**2.** **地址对齐检查（重要的异常发生类型）**
+
+• 逻辑：根据操作类型（ Load / Store ）检查地址是否对齐。
+
+• Load 指令：地址需对齐访问粒度（如LW需4字节对齐）。
+
+• Store 指令：地址需对齐且可写权限（如SW需4字节对齐）。
+
+• 异常触发：若未对齐，生成Load或Store异常，在 MEM 异常处理模块进一步处理。
+
+**3.** **异常处理**
+
+• 信号主要包括： 异常发生信号 ， 异常类型信号 （必要时可包括 异常地址信号 ）输出。
+
+• 逻辑：阻止当前访存操作，将访存使能信号置0，输出异常处理信号（为 O 信号，交给异常处理模
+
+块）。
+
+**4.** **指令数据的处理**
+
+• 信号主要包括： 数据 ， 地址 ， 写使能 输出
+
+• 逻辑：根据操作类型进行处理（ Load / 非Load ）• Load 指令：来自存储的数据
+
+• 非Load 指令：来自 EX 的计算结果，透传至下一阶段
+
+
+
+### **BP部分**
+
+1.分支预测
+
+PC 先输入未经预测的当前 PC 值（（由于双发射所以是 PC 和 PC+4），由本模块预测后得到这
+
+两条 pc 是否跳转，以及如果跳转，跳转目标 pc 是多少。其中 BP_Jump_Enable_Out_O 为 2
+
+位，00 说明两个 pc 都预测 NT，10 说明 pc 预测 T，pc+4 预测 NT，01 同理，11 冗余。
+
+2.预测学习
+
+本模块需要来自 EX 模块（若分支预测的运算由其他模块实现，则来自相应模块）的输出结
+
+果，来写入本模块内部的寄存器作为分支预测的依据
+
+
+
+![image-20250424115941404](C:\Users\music\AppData\Roaming\Typora\typora-user-images\image-20250424115941404.png)
+
+## **7. 小组分工** 
+
+1.     取指IF 曹嫣然 
+
+2.     译码ID  庄心妍
+
+3.     执行EX 何凡
+
+4.     访存MEM 刘延昌
+
+5.     级间寄存器  程仁龙
+
+6.     寄存器堆RF  张鑫宏
+
+7.     CU模块 蔡心钰
+
+8.     分支预测  姜佳宇
+
+9.     CSR及异常处理 白佳瑶
+
+10. 整体架构设计以及spec文档撰写 乔际帆
