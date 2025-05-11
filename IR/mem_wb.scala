@@ -1,0 +1,176 @@
+import chisel3._
+import chisel3.util._
+
+// 根据 defines.vh 定义对应的 Chisel Bundles
+class ctrl_sign extends Bundle {
+  val aluop = UInt(8.W)
+  val flush_all = Bool()
+  val read_rs = Bool()
+  val read_rt = Bool()
+  val reg_write = Bool()
+  val mem_en = Bool()
+  val mem_write_reg = Bool()
+  val mem_read = Bool()
+  val mem_write = Bool()
+  val cp0_read = Bool()
+  val cp0_write = Bool()
+  val hilo_read = Bool()
+  val hilo_write = Bool()
+  val may_bring_flush = Bool()
+  val only_one_issue = Bool()
+  val icache_fence = Bool()
+  val dcache_fence = Bool()
+  val tlb_fence = Bool()
+  val mul_en = Bool()
+  val div_en = Bool()
+}
+
+class except_bus extends Bundle {
+  val if_adel = Bool()
+  val if_tlbl = Bool()
+  val if_tlbrf = Bool()
+  val id_ri = Bool()
+  val id_syscall = Bool()
+  val id_break = Bool()
+  val id_eret = Bool()
+  val id_int = Bool()
+  val id_cpu = Bool()
+  val ex_ov = Bool()
+  val ex_adel = Bool()
+  val ex_ades = Bool()
+  val ex_tlbl = Bool()
+  val ex_tlbs = Bool()
+  val ex_tlbm = Bool()
+  val ex_tlbrf = Bool()
+  val ex_trap = Bool()
+}
+
+class mem_wb extends Module {
+  val io = IO(new Bundle {
+    val clear1 = Input(Bool())
+    val clear2 = Input(Bool())
+    val ena1 = Input(Bool())
+    val ena2 = Input(Bool())
+
+    // Master通道信号
+    // val M_master_ctrl_sign = Input(new ctrl_sign())
+    val M_master_except = Input(new except_bus())
+    val M_master_reg_wen = Input(Bool())
+    val M_master_reg_waddr = Input(UInt(5.W))
+    val M_master_inst = Input(UInt(32.W))
+    val M_master_pc = Input(UInt(32.W))
+    val M_master_reg_wdata = Input(UInt(32.W))
+    val M_master_debug_cp0_count = Input(UInt(32.W))
+    val M_master_debug_cp0_random = Input(UInt(32.W))
+    val M_master_debug_cp0_cause = Input(UInt(32.W))
+    val M_master_debug_int = Input(Bool())
+    
+    // val W_master_ctrl_sign = Output(new ctrl_sign())
+    val W_master_except = Output(new except_bus())
+    val W_master_reg_wen = Output(Bool())
+    val W_master_reg_waddr = Output(UInt(5.W))
+    val W_master_inst = Output(UInt(32.W))
+    val W_master_pc = Output(UInt(32.W))
+    val W_master_reg_wdata = Output(UInt(32.W))
+    val W_master_debug_cp0_count = Output(UInt(32.W))
+    val W_master_debug_cp0_random = Output(UInt(32.W))
+    val W_master_debug_cp0_cause = Output(UInt(32.W))
+    val W_master_debug_int = Output(Bool())
+
+    // Slave通道信号
+    // val M_slave_ctrl_sign = Input(new ctrl_sign())
+    val M_slave_except = Input(new except_bus())
+    val M_slave_reg_wen = Input(Bool())
+    val M_slave_reg_waddr = Input(UInt(5.W))
+    val M_slave_inst = Input(UInt(32.W))
+    val M_slave_pc = Input(UInt(32.W))
+    val M_slave_reg_wdata = Input(UInt(32.W))
+    
+    // val W_slave_ctrl_sign = Output(new ctrl_sign())
+    val W_slave_except = Output(new except_bus())
+    val W_slave_reg_wen = Output(Bool())
+    val W_slave_reg_waddr = Output(UInt(5.W))
+    val W_slave_inst = Output(UInt(32.W))
+    val W_slave_pc = Output(UInt(32.W))
+    val W_slave_reg_wdata = Output(UInt(32.W))
+  })
+
+  // 定义Master通道寄存器结构体
+  class MasterRegBundle extends Bundle {
+    // val ctrl_sign = new ctrl_sign()
+    val except = new except_bus()
+    val reg_wen = Bool()
+    val reg_waddr = UInt(5.W)
+    val inst = UInt(32.W)
+    val pc = UInt(32.W)
+    val reg_wdata = UInt(32.W)
+    val debug_cp0_count = UInt(32.W)
+    val debug_cp0_random = UInt(32.W)
+    val debug_cp0_cause = UInt(32.W)
+    val debug_int = Bool()
+  }
+  val masterReg = RegInit(0.U.asTypeOf(new MasterRegBundle))
+
+  // 定义Slave通道寄存器结构体
+  class SlaveRegBundle extends Bundle {
+    // val ctrl_sign = new ctrl_sign()
+    val except = new except_bus()
+    val reg_wen = Bool()
+    val reg_waddr = UInt(5.W)
+    val inst = UInt(32.W)
+    val pc = UInt(32.W)
+    val reg_wdata = UInt(32.W)
+  }
+  val slaveReg = RegInit(0.U.asTypeOf(new SlaveRegBundle))
+
+  // Master通道寄存器逻辑
+  when(reset || io.clear1) {
+    masterReg := 0.U.asTypeOf(new MasterRegBundle)
+  }.elsewhen(io.ena1) {
+    // masterReg.ctrl_sign := io.M_master_ctrl_sign
+    masterReg.except := io.M_master_except
+    masterReg.reg_wen := io.M_master_reg_wen
+    masterReg.reg_waddr := io.M_master_reg_waddr
+    masterReg.inst := io.M_master_inst
+    masterReg.pc := io.M_master_pc
+    masterReg.reg_wdata := io.M_master_reg_wdata
+    masterReg.debug_cp0_count := io.M_master_debug_cp0_count
+    masterReg.debug_cp0_random := io.M_master_debug_cp0_random
+    masterReg.debug_cp0_cause := io.M_master_debug_cp0_cause
+    masterReg.debug_int := io.M_master_debug_int
+  }
+
+  // Slave通道寄存器逻辑
+  when(reset || io.clear2) {
+    slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
+  }.elsewhen(io.ena2) {
+    // slaveReg.ctrl_sign := io.M_slave_ctrl_sign
+    slaveReg.except := io.M_slave_except
+    slaveReg.reg_wen := io.M_slave_reg_wen
+    slaveReg.reg_waddr := io.M_slave_reg_waddr
+    slaveReg.inst := io.M_slave_inst
+    slaveReg.pc := io.M_slave_pc
+    slaveReg.reg_wdata := io.M_slave_reg_wdata
+  }
+
+  // 连接输出
+  // io.W_master_ctrl_sign := masterReg.ctrl_sign
+  io.W_master_except := masterReg.except
+  io.W_master_reg_wen := masterReg.reg_wen
+  io.W_master_reg_waddr := masterReg.reg_waddr
+  io.W_master_inst := masterReg.inst
+  io.W_master_pc := masterReg.pc
+  io.W_master_reg_wdata := masterReg.reg_wdata
+  io.W_master_debug_cp0_count := masterReg.debug_cp0_count
+  io.W_master_debug_cp0_random := masterReg.debug_cp0_random
+  io.W_master_debug_cp0_cause := masterReg.debug_cp0_cause
+  io.W_master_debug_int := masterReg.debug_int
+
+  // io.W_slave_ctrl_sign := slaveReg.ctrl_sign
+  io.W_slave_except := slaveReg.except
+  io.W_slave_reg_wen := slaveReg.reg_wen
+  io.W_slave_reg_waddr := slaveReg.reg_waddr
+  io.W_slave_inst := slaveReg.inst
+  io.W_slave_pc := slaveReg.pc
+  io.W_slave_reg_wdata := slaveReg.reg_wdata
+}
