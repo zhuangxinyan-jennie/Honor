@@ -39,13 +39,13 @@
 
 在双发射的 CPU 设计中，双发策略会影响整个数据通路的设计，我们下面介绍我们处理器的双发策略，在issuectrl的代码部分解释了整个处理器的双发策略。
 
-**1．only＿Master 类指令：**即只能放在 Master 发射，且 Slave 不发射指令。对于可能刷新整个流水线的指令（如 MTC0，SYSCALL，ERET，BREAK，TLBWI，TLBWR 等指令），如果在 Slave 中检测到这类指令，则暂停 Slave 发射，将其延迟到下一周期的 Master 发射；如果在 Master 中检测到这类指令，也会暂停 Slave 发射，避免不必要的流水线刷新。
+**1．only＿Master 类指令：**即只能放在 Master 发射，且 Slave 不发射指令。对于可能刷新整个流水线的指令（如异常处理有关的指令），如果在 Slave 中检测到这类指令，则暂停 Slave 发射，将其延迟到下一周期的 Master 发射；如果在 Master 中检测到这类指令，也会暂停 Slave 发射，避免不必要的流水线刷新。
 
-**2．only＿in＿Master 类指令：**即只能放在 Master 发射，且 Slave可发射指令。对于跳转指令，在一定条件下会跳转到其他地址，并刷新整个流水线。和 only＿Master 不同的是，跳转指令会涉及到延迟槽的处理。故如果在 Slave 中检测到这类指令，则暂停 Slave 发射，将其延迟到下一周期的 Master 发射；如果在 Master 中检测到这类指令，若满足 Slave 发射条件，则发射该条指令（延迟槽），若不满足，则在下一周期的 Master 中发射延迟槽数据。
+**2．only＿in＿Master 类指令：**即只能放在 Master 发射，但Slave可发射指令。对于跳转指令，在一定条件下会跳转到其他地址，并刷新整个流水线。和 only＿Master 不同的是，跳转指令会涉及到延迟槽的处理。故如果在 Slave 中检测到这类指令，则暂停 Slave 发射，将其延迟到下一周期的 Master 发射；如果在 Master 中检测到这类指令，若满足 Slave 发射条件，则发射该条指令（延迟槽），若不满足，则在下一周期的 Master 中发射延迟槽数据。
 
 **3．数据冲突**
-（a）．RAW 冲突：检查 Master 和 Slave 之间是否存在 HiLo，CP0，GPR 等寄存器的 RAW 情况，若存在，则 Slave 不发射。
-（b）．Load To Use 冲突：检查 Slave 读到的寄存器是否是当前在 E阶段执行的读存指令的结果，若是，则 Slave 不发射。
+（a）．RAW 冲突：检查 Master 和 Slave 之间是否存在 CSR，Regfile，(待补充，比如乘除法单元) 等寄存器的 RAW 情况，若存在，则 Slave 不发射。
+（b）．Load To Use 冲突：检查 Slave 读到的寄存器是否是当前在 E阶段执行的访存指令的结果，若是，则 Slave 不发射。
 
 **4．数据有效性：**Slave 发射的前提是 Master 发射或当前第二条指令有效。若遇到 Master 暂停发射或指令 FIFO为空的情况下，Slave 不发射。
 
@@ -59,7 +59,7 @@
 －WAR 冲突：由于本设计为顺序流水线，故不存在 WAR 冲突。
 
 **2.4.2 控制冲突**
-当遇到跳转指令时，会产生控制冲突。我们用延迟槽来解决控制冲突。本设计中，若产生跳转（译码阶段或执行阶段），则根据发射情况判断当前 Path 中的第一条读数据是否是延迟槽数据。如果是，则需要判断当时是否有阻塞信号，若没有则直接执行该第一条读数据，若有则需要保留该数据到指定 delayslot＿data 寄存器，以备阻塞取消后使用；此外跳转会引起流水线的刷新，但需要保证延迟槽数据能够不被刷新并正常流入下一阶段执行。如果不是，则正常刷新流水线即可。
+当遇到跳转指令时，会产生控制冲突。我们用延迟槽来解决控制冲突。本设计中，若产生跳转（译码阶段或执行阶段），则根据发射情况判断当前 Path 中的第一条指令是否是延迟槽指令。如果是，则需要判断当时是否有阻塞信号，若没有则直接执行该第一条指令，若有则需要保留该指令到指定 delayslot＿data 寄存器，以备阻塞取消后使用；此外跳转会引起流水线的刷新，但需要保证延迟槽指令能够不被刷新并正常流入下一阶段执行。如果不是，则正常刷新流水线即可。
 
 
 
@@ -141,7 +141,7 @@
 | 端口名称              | 方向 | 位宽      | 功能描述                                        |
 | --------------------- | ---- | --------- | ----------------------------------------------- |
 | instr                 | I    | 32        | 输入的指令码                                    |
-| c0_useable            | I    | 1         | CP0 是否可用 (根据 MIPS 架构模式判断)           |
+| c0_useable            | I    | 1         | CSR是否可用 (根据 RISCV 架构模式判断)           |
 | op                    | O    | 6         | 指令的 opcode 字段                              |
 | rs                    | O    | 5         | 指令的 rs 字段 (源寄存器 1 地址)                |
 | rt                    | O    | 5         | 指令的 rt 字段 (源寄存器 2 / 目标寄存器地址)    |
@@ -160,7 +160,7 @@
 | break_inst            | O    | 1         | 是否是 BREAK 指令                               |
 | eret_inst             | O    | 1         | 是否是 ERET 指令                                |
 | id_cpu                | O    | 1         | 是否是协处理器不可用异常 (CPUnavailable)        |
-| cop0_info_out         | O    | cop0_info | CP0 相关指令的操作信息 (读/写哪个 CP0 寄存器等) |
+| cop0_info_out         | O    | cop0_info | CSR 相关指令的操作信息 (读/写哪个 CSR 寄存器等) |
 
 #### **BP模块**
 
@@ -200,8 +200,8 @@
 | D_master_hilowrite      | I    | 1    | D 阶段 Master 指令是否写 Hi/Lo 寄存器                        |
 | D_slave_hiloread        | I    | 1    | D 阶段 Slave 指令是否读 Hi/Lo 寄存器                         |
 | D_slave_hilowrite       | I    | 1    | D 阶段 Slave 指令是否写 Hi/Lo 寄存器                         |
-| D_master_cp0write       | I    | 1    | D 阶段 Master 指令是否写 CP0 寄存器                          |
-| D_slave_cp0read         | I    | 1    | D 阶段 Slave 指令是否读 CP0 寄存器                           |
+| D_master_CSRwrite       | I    | 1    | D 阶段 Master 指令是否写 CSR 寄存器                          |
+| D_slave_CSRread         | I    | 1    | D 阶段 Slave 指令是否读 CSR 寄存器                           |
 | D_master_is_branch      | I    | 1    | D 阶段 Master 指令是否是分支/跳转指令 (用于判断 Slave 是否在延迟槽) |
 | D_master_only_one_issue | I    | 1    | D 阶段 Master 指令是否是只能单发射的指令 (如 SYSCALL, ERET)  |
 | D_slave_only_one_issue  | I    | 1    | D 阶段 Slave 指令是否是只能单发射的指令 (如果出现在 Slave 路径) |
@@ -269,7 +269,7 @@
 | i_stall            | I    | 1    | 来自指令 Cache 或 FIFO 的暂停请求                   |
 | E_alu_stall        | I    | 1    | 来自 ALU（乘除法等）的暂停请求                      |
 | d_stall            | I    | 1    | 来自数据 Cache 或 MEM 阶段的暂停请求                |
-| M_except           | I    | 1    | M 阶段是否发生异常或中断需要跳转 (来自 CP0)         |
+| M_except           | I    | 1    | M 阶段是否发生异常或中断需要跳转 (来自 CSR)         |
 | M_flush_all        | I    | 1    | M 阶段是否需要刷新整个流水线 (如 Cache fence)       |
 | E_bj               | I    | 1    | E 阶段是否发生分支/跳转（预测错误或延迟跳转）       |
 | D_bj               | I    | 1    | D 阶段是否发生分支/跳转（预测跳转或无冲突跳转）     |
@@ -341,7 +341,7 @@
 | ena2                     | I    | 1          | Slave 路径寄存器使能 (D_slave_ena)                           |
 | D_master_ctrl_sign       | I    | ctrl_sign  | D 阶段 Master 路径控制信号                                   |
 | D_master_except          | I    | except_bus | D 阶段 Master 路径异常信号                                   |
-| D_master_cop0_info       | I    | cop0_info  | D 阶段 Master 路径 CP0 操作信息                              |
+| D_master_cop0_info       | I    | cop0_info  | D 阶段 Master 路径 CSR 操作信息                              |
 | D_master_is_link_pc8     | I    | 1          | D 阶段 Master 指令是否需要链接 PC+8                          |
 | D_master_is_in_delayslot | I    | 1          | D 阶段 Master 指令是否在延迟槽                               |
 | D_master_is_branch       | I    | 1          | D 阶段 Master 指令是否是分支指令                             |
@@ -364,7 +364,7 @@
 | D_master_branch_target   | I    | 32         | D 阶段 Master 分支目标地址                                   |
 | D_slave_ctrl_sign        | I    | ctrl_sign  | D 阶段 Slave 路径控制信号                                    |
 | D_slave_except           | I    | except_bus | D 阶段 Slave 路径异常信号                                    |
-| D_slave_cop0_info        | I    | cop0_info  | D 阶段 Slave 路径 CP0 操作信息                               |
+| D_slave_cop0_info        | I    | cop0_info  | D 阶段 Slave 路径 CSR 操作信息                               |
 | D_slave_is_in_delayslot  | I    | 1          | D 阶段 Slave 指令是否在延迟槽                                |
 | D_slave_rs               | I    | 5          | D 阶段 Slave rs 地址                                         |
 | D_slave_rt               | I    | 5          | D 阶段 Slave rt 地址                                         |
@@ -379,7 +379,7 @@
 | D_slave_shamt_value      | I    | 32         | D 阶段 Slave 移位量值                                        |
 | E_master_ctrl_sign       | O    | ctrl_sign  | E 阶段 Master 路径控制信号                                   |
 | E_master_except          | O    | except_bus | E 阶段 Master 路径异常信号 (临时，未合并 ALU/MEM 异常)       |
-| E_master_cop0_info       | O    | cop0_info  | E 阶段 Master 路径 CP0 操作信息                              |
+| E_master_cop0_info       | O    | cop0_info  | E 阶段 Master 路径 CSR 操作信息                              |
 | E_master_is_link_pc8     | O    | 1          | E 阶段 Master 指令是否需要链接 PC+8                          |
 | E_master_is_in_delayslot | O    | 1          | E 阶段 Master 指令是否在延迟槽                               |
 | E_master_is_branch       | O    | 1          | E 阶段 Master 指令是否是分支指令                             |
@@ -402,7 +402,7 @@
 | E_master_branch_target   | O    | 32         | E 阶段 Master 分支目标地址                                   |
 | E_slave_ctrl_sign        | O    | ctrl_sign  | E 阶段 Slave 路径控制信号                                    |
 | E_slave_except           | O    | except_bus | E 阶段 Slave 路径异常信号 (临时)                             |
-| E_slave_cop0_info        | O    | cop0_info  | E 阶段 Slave 路径 CP0 操作信息                               |
+| E_slave_cop0_info        | O    | cop0_info  | E 阶段 Slave 路径 CSR 操作信息                               |
 | E_slave_is_in_delayslot  | O    | 1          | E 阶段 Slave 指令是否在延迟槽                                |
 | E_slave_rs               | O    | 5          | E 阶段 Slave rs 地址                                         |
 | E_slave_rt               | O    | 5          | E 阶段 Slave rt 地址                                         |
@@ -476,12 +476,12 @@
 | M_slave_pc                | O    | 32         | M 阶段 Slave PC 值                                   |
 | M_slave_inst              | O    | 32         | M 阶段 Slave 指令                                    |
 | M_slave_alu_res           | O    | 32         | M 阶段 Slave ALU 结果                                |
-| E_master_debug_cp0_count  | I    | 32         | E 阶段 Master CP0 Count 调试值                       |
-| E_master_debug_cp0_random | I    | 32         | E 阶段 Master CP0 Random 调试值                      |
-| E_master_debug_cp0_cause  | I    | 32         | E 阶段 Master CP0 Cause 调试值                       |
-| M_master_debug_cp0_count  | O    | 32         | M 阶段 Master CP0 Count 调试值                       |
-| M_master_debug_cp0_random | O    | 32         | M 阶段 Master CP0 Random 调试值                      |
-| M_master_debug_cp0_cause  | O    | 32         | M 阶段 Master CP0 Cause 调试值                       |
+| E_master_debug_CSR_count  | I    | 32         | E 阶段 Master CSR Count 调试值                       |
+| E_master_debug_CSR_random | I    | 32         | E 阶段 Master CSR Random 调试值                      |
+| E_master_debug_CSR_cause  | I    | 32         | E 阶段 Master CSR Cause 调试值                       |
+| M_master_debug_CSR_count  | O    | 32         | M 阶段 Master CSR Count 调试值                       |
+| M_master_debug_CSR_random | O    | 32         | M 阶段 Master CSR Random 调试值                      |
+| M_master_debug_CSR_cause  | O    | 32         | M 阶段 Master CSR Cause 调试值                       |
 
 **5.8.3. MEM/WB 寄存器组 (MEM_WB_Reg)**
 
@@ -517,13 +517,13 @@
 | W_slave_inst              | O    | 32         | W 阶段 Slave 指令                                |
 | W_slave_pc                | O    | 32         | W 阶段 Slave PC 值                               |
 | W_slave_reg_wdata         | O    | 32         | W 阶段 Slave 写寄存器数据                        |
-| M_master_debug_cp0_count  | I    | 32         | M 阶段 Master CP0 Count 调试值                   |
-| M_master_debug_cp0_random | I    | 32         | M 阶段 Master CP0 Random 调试值                  |
-| M_master_debug_cp0_cause  | I    | 32         | M 阶段 Master CP0 Cause 调试值                   |
+| M_master_debug_CSR_count  | I    | 32         | M 阶段 Master CSR Count 调试值                   |
+| M_master_debug_CSR_random | I    | 32         | M 阶段 Master CSR Random 调试值                  |
+| M_master_debug_CSR_cause  | I    | 32         | M 阶段 Master CSR Cause 调试值                   |
 | M_master_debug_int        | I    | 1          | M 阶段 Master 是否发生中断异常                   |
-| W_master_debug_cp0_count  | O    | 32         | W 阶段 Master CP0 Count 调试值                   |
-| W_master_debug_cp0_random | O    | 32         | W 阶段 Master CP0 Random 调试值                  |
-| W_master_debug_cp0_cause  | O    | 32         | W 阶段 Master CP0 Cause 调试值                   |
+| W_master_debug_CSR_count  | O    | 32         | W 阶段 Master CSR Count 调试值                   |
+| W_master_debug_CSR_random | O    | 32         | W 阶段 Master CSR Random 调试值                  |
+| W_master_debug_CSR_cause  | O    | 32         | W 阶段 Master CSR Cause 调试值                   |
 | W_master_debug_int        | O    | 1          | W 阶段 Master 是否发生中断异常                   |
 
 ## **6. 模块内部功能描述**
@@ -672,7 +672,127 @@ CPU每个时钟周期：
 
 ### **ID部分**
 
-![16fd0d3142e275a3ec00d1ea7481296b](C:\Users\music\Documents\xwechat_files\wxid_myhf964qcxfw32_5e20\temp\2025-04\RWTemp\cc8532945a8b386258e244a1ef30a5e4\16fd0d3142e275a3ec00d1ea7481296b.png)
+***\*Issue_ctrl模块:\****
+
+这是一个双发射处理器中的发射控制模块，用于判断是否可以同时发射两条指令。
+
+***\*主要负责\****：
+
+· 检测各类冲突
+
+· 控制指令发射
+
+· 管理分支预测
+
+· 确保指令执行的正确性
+
+ 
+
+***\*输入信号分类\****
+
+\- 基本控制信号：
+
+\- 结构冲突相关
+
+\- 数据相关（LOAD相关）
+
+\- WAR相关
+
+ 
+
+***\*冲突检测逻辑\****
+
+\- FIFO状态检测：当FIFO为空或者即将为空时，禁止双发射（由IF阶段同学完成判断）
+
+\- 结构冲突检测：
+
+l 检测内存访问冲突
+
+lw  $t0, 0($t1)    # 主指令（访存）
+
+sw  $t2, 4($t3)    # 从指令（访存）
+
+l 检测乘除法器冲突
+
+mult $t0, $t1     # 主指令（使用乘法器）
+
+div  $t2, $t3     # 从指令（使用除法器）
+
+乘除法器资源冲突，不能同时发射
+
+\- LOAD相关检测：
+
+l 检测从指令是否依赖于前面LOAD指令的结果
+
+lw  $t0, 0($t1)    # 主指令（Load）
+
+add $t2, $t0, $t3   # 从指令（使用Load的结果）
+
+\- RAW冲突检测：
+
+l 寄存器RAW
+
+add $t0, $t1, $t2   # 主指令
+
+sub $t3, $t0, $t4   # 从指令（使用了主指令的结果）
+
+l HILO寄存器RAW（待定）
+
+mult $t0, $t1     # 主指令（写HILO）
+
+mfhi $t2       # 从指令（读HI）
+
+从指令需要等待HILO写入完成，不能同时发射
+
+***\*特殊情况处理：\****
+
+\- 分支指令处理
+
+主指令、从指令是否分支/跳转
+
+\- CSR指令处理（单发射）
+
+主从指令是否为CSR指令
+
+\- FENCE指令处理（单发射）
+
+主从指令是否是FENCE指令
+
+***\*最终的发射逻辑\****
+
+// 发射控制逻辑
+
+val D_slave_ena = !(
+
+  !D_master_valid |     // 主指令无效
+
+  fifo_disable |       // FIFO状态限制
+
+  struct_conflict |     // 结构冲突
+
+  load_stall |        // Load相关
+
+  war_reg |         // 寄存器WAR
+
+  branch_limit |       // 分支/跳转限制
+
+  csr_limit |        // CSR限制
+
+  fence_limit        // FENCE限制
+
+);
+
+ 
+
+需要特殊考虑的地方：
+
+（1）：X0寄存器始终为0
+
+（2）：立即数不需要读RS2
+
+（3）：后续加入32M指令集需要拓展部分端口（还没协商好）
+
+ 
 
 ### **EX部分**
 
