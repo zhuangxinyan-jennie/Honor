@@ -215,138 +215,110 @@ class BTB(
     when(io.branchE) {
       when(providerE === 0.U) {
         // T0更新
-        val updateT0Pred = RegNext(Mux(io.actualTakeE,
+        t0Pred(io.pcE(tnLenLg2+1, 2)) := Mux(io.actualTakeE,
           t0Pred(io.pcE(tnLenLg2+1, 2)) + 1.U,
           t0Pred(io.pcE(tnLenLg2+1, 2)) - 1.U
-        ), t0Pred(io.pcE(tnLenLg2+1, 2)))
-        t0Pred(io.pcE(tnLenLg2+1, 2)) := updateT0Pred
+        )
       }.elsewhen(providerE === 1.U) {
         // T1更新
-        val updateT1Pred = RegNext(Mux(io.actualTakeE,
+        t1Pred(hashT1E) := Mux(io.actualTakeE,
           Mux(t1Pred(hashT1E) === Fill(predWidth, 1.U(1.W)), t1Pred(hashT1E), t1Pred(hashT1E) + 1.U),
           Mux(t1Pred(hashT1E) === 0.U, t1Pred(hashT1E), t1Pred(hashT1E) - 1.U)
-        ), t1Pred(hashT1E))
-        t1Pred(hashT1E) := updateT1Pred
+        )
 
-        val updateT1U = RegNext(Mux(use,
+        t1U(hashT1E) := Mux(use,
           Mux(t1U(hashT1E) === Fill(uWidth, 1.U(1.W)), t1U(hashT1E), t1U(hashT1E) + 1.U),
           Mux(t1U(hashT1E) === 0.U, t1U(hashT1E), t1U(hashT1E) - 1.U)
-        ), t1U(hashT1E))
-        t1U(hashT1E) := updateT1U
+        )
 
         when(!use) {
           when(t2U(hashT2E) === 0.U) {
-            val updateT2Pred = RegNext(Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE)), t2Pred(hashT2E))
-            val updateT2U = RegNext(0.U, t2U(hashT2E))
-            val updateT2Tag = RegNext(tagT2E, t2Tag(hashT2E))
-            t2Pred(hashT2E) := updateT2Pred
-            t2U(hashT2E) := updateT2U
-            t2Tag(hashT2E) := updateT2Tag
+            t2Pred(hashT2E) := Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE))
+            t2U(hashT2E) := 0.U
+            t2Tag(hashT2E) := tagT2E
           }.elsewhen(t3U(hashT3E) === 0.U) {
-            val updateT3Pred = RegNext(Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE)), t3Pred(hashT3E))
-            val updateT3U = RegNext(0.U, t3U(hashT3E))
-            val updateT3Tag = RegNext(tagT3E, t3Tag(hashT3E))
-            t3Pred(hashT3E) := updateT3Pred
-            t3U(hashT3E) := updateT3U
-            t3Tag(hashT3E) := updateT3Tag
+            t3Pred(hashT3E) := Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE))
+            t3U(hashT3E) := 0.U
+            t3Tag(hashT3E) := tagT3E
           }.elsewhen(t4U(hashT4E) === 0.U) {
-            val updateT4Pred = RegNext(Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE)), t4Pred(hashT4E))
-            val updateT4U = RegNext(0.U, t4U(hashT4E))
-            val updateT4Tag = RegNext(tagT4E, t4Tag(hashT4E))
-            t4Pred(hashT4E) := updateT4Pred
-            t4U(hashT4E) := updateT4U
-            t4Tag(hashT4E) := updateT4Tag
+            t4Pred(hashT4E) := Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE))
+            t4U(hashT4E) := 0.U
+            t4Tag(hashT4E) := tagT4E
           }.otherwise {
-            val updateT2U = RegNext(t2U(hashT2E) - 1.U, t2U(hashT2E))
-            val updateT3U = RegNext(t3U(hashT3E) - 1.U, t3U(hashT3E))
-            val updateT4U = RegNext(t4U(hashT4E) - 1.U, t4U(hashT4E))
-            t2U(hashT2E) := updateT2U
-            t3U(hashT3E) := updateT3U
-            t4U(hashT4E) := updateT4U
+            t2U(hashT2E) := t2U(hashT2E) - 1.U
+            t3U(hashT3E) := t3U(hashT3E) - 1.U
+            t4U(hashT4E) := t4U(hashT4E) - 1.U
           }
         }
       }.elsewhen(providerE === 2.U) {
         // T2更新
-        val updateT2Pred = RegNext(Mux(io.actualTakeE,
+        t2Pred(hashT2E) := Mux(io.actualTakeE,
           Mux(t2Pred(hashT2E) === Fill(predWidth, 1.U(1.W)), t2Pred(hashT2E), t2Pred(hashT2E) + 1.U),
           Mux(t2Pred(hashT2E) === 0.U, t2Pred(hashT2E), t2Pred(hashT2E) - 1.U)
-        ), t2Pred(hashT2E))
-        t2Pred(hashT2E) := updateT2Pred
+        )
 
-        val updateT2U = RegNext(Mux(use,
+        t2U(hashT2E) := Mux(use,
           Mux(t2U(hashT2E) === Fill(uWidth, 1.U(1.W)), t2U(hashT2E), t2U(hashT2E) + 1.U),
           Mux(t2U(hashT2E) === 0.U, t2U(hashT2E), t2U(hashT2E) - 1.U)
-        ), t2U(hashT2E))
-        t2U(hashT2E) := updateT2U
+        )
 
         when(!use) {
           when(t3U(hashT3E) === 0.U) {
-            val updateT3Pred = RegNext(Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE)), t3Pred(hashT3E))
-            val updateT3U = RegNext(0.U, t3U(hashT3E))
-            val updateT3Tag = RegNext(tagT3E, t3Tag(hashT3E))
-            t3Pred(hashT3E) := updateT3Pred
-            t3U(hashT3E) := updateT3U
-            t3Tag(hashT3E) := updateT3Tag
+            t3Pred(hashT3E) := Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE))
+            t3U(hashT3E) := 0.U
+            t3Tag(hashT3E) := tagT3E
           }.elsewhen(t4U(hashT4E) === 0.U) {
-            val updateT4Pred = RegNext(Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE)), t4Pred(hashT4E))
-            val updateT4U = RegNext(0.U, t4U(hashT4E))
-            val updateT4Tag = RegNext(tagT4E, t4Tag(hashT4E))
-            t4Pred(hashT4E) := updateT4Pred
-            t4U(hashT4E) := updateT4U
-            t4Tag(hashT4E) := updateT4Tag
+            t4Pred(hashT4E) := Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE))
+            t4U(hashT4E) := 0.U
+            t4Tag(hashT4E) := tagT4E
           }.otherwise {
-            val updateT3U = RegNext(t3U(hashT3E) - 1.U, t3U(hashT3E))
-            val updateT4U = RegNext(t4U(hashT4E) - 1.U, t4U(hashT4E))
-            t3U(hashT3E) := updateT3U
-            t4U(hashT4E) := updateT4U
+            t3U(hashT3E) := t3U(hashT3E) - 1.U
+            t4U(hashT4E) := t4U(hashT4E) - 1.U
           }
         }
       }.elsewhen(providerE === 3.U) {
         // T3更新
-        val updateT3Pred = RegNext(Mux(io.actualTakeE,
+        t3Pred(hashT3E) := Mux(io.actualTakeE,
           Mux(t3Pred(hashT3E) === Fill(predWidth, 1.U(1.W)), t3Pred(hashT3E), t3Pred(hashT3E) + 1.U),
           Mux(t3Pred(hashT3E) === 0.U, t3Pred(hashT3E), t3Pred(hashT3E) - 1.U)
-        ), t3Pred(hashT3E))
-        t3Pred(hashT3E) := updateT3Pred
+        )
 
-        val updateT3U = RegNext(Mux(use,
+        t3U(hashT3E) := Mux(use,
           Mux(t3U(hashT3E) === Fill(uWidth, 1.U(1.W)), t3U(hashT3E), t3U(hashT3E) + 1.U),
           Mux(t3U(hashT3E) === 0.U, t3U(hashT3E), t3U(hashT3E) - 1.U)
-        ), t3U(hashT3E))
-        t3U(hashT3E) := updateT3U
+        )
 
         when(!use) {
           when(t4U(hashT4E) === 0.U) {
-            val updateT4Pred = RegNext(Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE)), t4Pred(hashT4E))
-            val updateT4U = RegNext(0.U, t4U(hashT4E))
-            val updateT4Tag = RegNext(tagT4E, t4Tag(hashT4E))
-            t4Pred(hashT4E) := updateT4Pred
-            t4U(hashT4E) := updateT4U
-            t4Tag(hashT4E) := updateT4Tag
+            t4Pred(hashT4E) := Cat(io.actualTakeE, Fill(predWidth-1, !io.actualTakeE))
+            t4U(hashT4E) := 0.U
+            t4Tag(hashT4E) := tagT4E
           }.otherwise {
-            val updateT4U = RegNext(t4U(hashT4E) - 1.U, t4U(hashT4E))
-            t4U(hashT4E) := updateT4U
+            t4U(hashT4E) := t4U(hashT4E) - 1.U
           }
         }
       }.elsewhen(providerE === 4.U) {
         // T4更新
-        val updateT4Pred = RegNext(Mux(io.actualTakeE,
+        t4Pred(hashT4E) := Mux(io.actualTakeE,
           Mux(t4Pred(hashT4E) === Fill(predWidth, 1.U(1.W)), t4Pred(hashT4E), t4Pred(hashT4E) + 1.U),
           Mux(t4Pred(hashT4E) === 0.U, t4Pred(hashT4E), t4Pred(hashT4E) - 1.U)
-        ), t4Pred(hashT4E))
-        t4Pred(hashT4E) := updateT4Pred
+        )
 
-        val updateT4U = RegNext(Mux(use,
+        t4U(hashT4E) := Mux(use,
           Mux(t4U(hashT4E) === Fill(uWidth, 1.U(1.W)), t4U(hashT4E), t4U(hashT4E) + 1.U),
           Mux(t4U(hashT4E) === 0.U, t4U(hashT4E), t4U(hashT4E) - 1.U)
-        ), t4U(hashT4E))
-        t4U(hashT4E) := updateT4U
+        )
       }
     }
   }
 }
 
 object MyModule extends App {
-  // 使用默认参数生成Verilog
-  println(getVerilogString(new BTB(2048, 1024, 3, 8, 2, 100, 1024)))
+  // 使用Chisel 3.5兼容的方式生成Verilog
+  (new chisel3.stage.ChiselStage).execute(
+    Array("-X", "verilog"),
+    Seq(
+      chisel3.stage.ChiselGeneratorAnnotation(() => new BTB(2048, 1024, 3, 8, 2, 100, 1024))
+    )
+  )
 } 
