@@ -44,11 +44,20 @@ class RegisterFile extends Module {
   }
 }
   // x0 always return 0 
-  def readReg(addr: UInt): UInt = Mux(addr === 0.U, 0.U, regs(addr))
+  // Slave > Master > old
+  def bypassRead(addr: UInt): UInt = {
+    MuxCase(
+      Mux(addr === 0.U, 0.U, regs(addr)), 
+      Seq(
+        (io.wen2 && io.wa2 =/= 0.U && io.wa2 === addr) -> io.wd2,
+        (io.wen1 && io.wa1 =/= 0.U && io.wa1 === addr && !(io.wen2 && io.wa2 === addr)) -> io.wd1
+      )
+    )
+  }
 
   // Read
-  io.rd1_a := readReg(io.ra1_a)
-  io.rd1_b := readReg(io.ra1_b)
-  io.rd2_a := readReg(io.ra2_a)
-  io.rd2_b := readReg(io.ra2_b)
+  io.rd1_a := bypassRead(io.ra1_a)
+  io.rd1_b := bypassRead(io.ra1_b)
+  io.rd2_a := bypassRead(io.ra2_a)
+  io.rd2_b := bypassRead(io.ra2_b)
 }
