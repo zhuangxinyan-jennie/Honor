@@ -4,69 +4,63 @@ import chisel3.util._
 class ControlUnit extends Module {
   val io = IO(new Bundle {
     // Input signals
-    val CU_ID_ReadRS1_I = Input(Bool())
-    val CU_ID_ReadRS2_I = Input(Bool())
-    val CU_ID_RS1_Addr_I = Input(UInt(5.W))
-    val CU_ID_RS2_Addr_I = Input(UInt(5.W))
-    val CU_EXE_MasterMemToReg_I = Input(Bool())
-    val CU_EXE_MasterWriteAddr_I = Input(UInt(5.W))
-    val CU_EXE_SlaveMemToReg_I = Input(Bool())
-    val CU_EXE_SlaveWriteAddr_I = Input(UInt(5.W))
-    val CU_IF_Stall_I = Input(Bool())
-    val CU_EXE_ALUStall_I = Input(Bool())
-    val CU_MEM_Stall_I = Input(Bool())
-    val CU_MEM_Exception_I = Input(Bool())
-    val CU_MEM_FlushAll_I = Input(Bool())
-    val CU_EXE_Branch_I = Input(Bool())
-    val CU_ID_Branch_I = Input(Bool())
+    val D_master_read_rs   = Input(Bool())
+    val D_master_read_rt   = Input(Bool())
+    val D_master_rs        = Input(UInt(5.W))
+    val D_master_rt        = Input(UInt(5.W))
+    val E_master_memtoReg  = Input(Bool())
+    val E_master_reg_waddr = Input(UInt(5.W))
+    val E_slave_memtoReg   = Input(Bool())
+    val E_slave_reg_waddr  = Input(UInt(5.W))
+    val E_alu_stall        = Input(Bool())
+    val d_stall            = Input(Bool())
+    val M_flush_all        = Input(Bool())
+    val E_bj               = Input(Bool())
 
     // Output signals
-    val CU_IF_ENA_O = Output(Bool())
-    val CU_ID_ENA_O = Output(Bool())
-    val CU_EXE_ENA_O = Output(Bool())
-    val CU_MEM_ENA_O = Output(Bool())
-    val CU_WB_ENA_O = Output(Bool())
-    val CU_IF_Flush_O = Output(Bool())
-    val CU_ID_Flush_O = Output(Bool())
-    val CU_EXE_Flush_O = Output(Bool())
-    val CU_MEM_Flush_O = Output(Bool())
-    val CU_WB_Flush_O = Output(Bool())
-    val CU_DelaySlotFlush_O = Output(Bool())
+    val F_ena              = Output(Bool())
+    val D_ena              = Output(Bool())
+    val E_ena              = Output(Bool())
+    val M_ena              = Output(Bool())
+    val W_ena              = Output(Bool())
+    val F_flush            = Output(Bool())
+    val D_flush            = Output(Bool())
+    val E_flush            = Output(Bool())
+    val M_flush            = Output(Bool())
+    val W_flush            = Output(Bool())
+    val delay_slot_flush   = Output(Bool())
   })
 
   // 检测Load-Use冒险 (lwstall)
   val loadUseHazard = Wire(Bool())
-  loadUseHazard := (io.CU_EXE_MasterMemToReg_I && (io.CU_EXE_MasterWriteAddr_I.orR) &&
-    ((io.CU_ID_ReadRS1_I && (io.CU_ID_RS1_Addr_I === io.CU_EXE_MasterWriteAddr_I)) ||
-      (io.CU_ID_ReadRS2_I && (io.CU_ID_RS2_Addr_I === io.CU_EXE_MasterWriteAddr_I)))) ||
-    (io.CU_EXE_SlaveMemToReg_I && (io.CU_EXE_SlaveWriteAddr_I.orR) &&
-      ((io.CU_ID_ReadRS1_I && (io.CU_ID_RS1_Addr_I === io.CU_EXE_SlaveWriteAddr_I)) ||
-        (io.CU_ID_ReadRS2_I && (io.CU_ID_RS2_Addr_I === io.CU_EXE_SlaveWriteAddr_I))))
+  loadUseHazard := (io.E_master_memtoReg && (io.E_master_reg_waddr.orR) &&
+    ((io.D_master_read_rs && (io.D_master_rs === io.E_master_reg_waddr)) ||
+     (io.D_master_read_rt && (io.D_master_rt === io.E_master_reg_waddr)))) ||
+    (io.E_slave_memtoReg && (io.E_slave_reg_waddr.orR) &&
+    ((io.D_master_read_rs && (io.D_master_rs === io.E_slave_reg_waddr)) ||
+     (io.D_master_read_rt && (io.D_master_rt === io.E_slave_reg_waddr))))
 
   // 控制冒险信号 (来自分支预测错误)
-  val branchHazard = io.CU_EXE_Branch_I || io.CU_ID_Branch_I
+  val branchHazard = io.E_bj
 
   // 最长停顿信号 (longest_stall)
-  val longestStall =
-    io.CU_EXE_ALUStall_I || io.CU_IF_Stall_I || io.CU_MEM_Stall_I
+  val longestStall = io.E_alu_stall || io.d_stall
 
   // 异常和全局冲刷信号
-  val exception = io.CU_MEM_Exception_I
-  val flushAll = io.CU_MEM_FlushAll_I
+  val flushAll = io.M_flush_all
 
-  io.CU_IF_ENA_O := !io.CU_IF_Stall_I // 只受IF阶段停顿影响，不受其他停顿影响
-  io.CU_ID_ENA_O := !(loadUseHazard || longestStall)
-  io.CU_EXE_ENA_O := !longestStall
-  io.CU_MEM_ENA_O := !longestStall
-  io.CU_WB_ENA_O := (!longestStall) || exception || flushAll // WB阶段特殊处理
+  io.F_ena := true.B
+  io.D_ena := !(loadUseHazard || longestStall)
+  io.E_ena := !longestStall
+  io.M_ena := !longestStall
+  io.W_ena := (!longestStall) || flushAll
 
-  io.CU_IF_Flush_O := false.B // IF阶段不冲刷
-  io.CU_ID_Flush_O := exception || flushAll || io.CU_EXE_Branch_I || io.CU_ID_Branch_I
-  io.CU_EXE_Flush_O := exception || flushAll || io.CU_EXE_Branch_I
-  io.CU_MEM_Flush_O := exception || flushAll
-  io.CU_WB_Flush_O := false.B // WB阶段不冲刷
+  io.F_flush := false.B
+  io.D_flush := flushAll || branchHazard
+  io.E_flush := flushAll || branchHazard
+  io.M_flush := flushAll
+  io.W_flush := false.B
 
-  // 延迟槽冲刷信号
-  io.CU_DelaySlotFlush_O := exception || flushAll
+  io.delay_slot_flush := flushAll
 }
 
