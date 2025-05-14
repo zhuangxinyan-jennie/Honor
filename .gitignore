@@ -1,0 +1,7 @@
+# Ignore Metals files
+.metals/
+.scala-build/
+
+# Ignore VS Code config
+.vscode/
+
