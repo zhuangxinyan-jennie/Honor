@@ -115,7 +115,9 @@ class MEM extends Module {
         val index = getIndex(addrReg)
         val tag   = getTag(addrReg)
         val hit   = valid(index) && (tags(index) === tag) //组合逻辑判断是否命中
-        
+        val ramAddr = (index << log2Ceil(LINE_WORDS)).asUInt() + wordOffset
+        val wordOffset = getWordOffset(addrReg)
+
         //添加MEM至EX阶段关于load指令的数据通路
         when(hit && io.cpu.mem_en && (opReg === "b0000011".U)) {
           io.ex_bypass_valid := true.B
@@ -132,8 +134,6 @@ class MEM extends Module {
         } 
 
         when(hit) {
-          val wordOffset = getWordOffset(addrReg)
-          val ramAddr = (index << log2Ceil(LINE_WORDS)).asUInt() + wordOffset
           when(opReg === "b0000011".U) { // Load
             memAccess.io.mem_en := true.B
             memAccess.io.mem_op := opReg
