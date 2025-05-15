@@ -25,6 +25,9 @@ class MEM extends Module {
       val addr     = Output(UInt(32.W)) //认定是物理地址，故无需TLB或者地址转换（根据助教提供的mem.scala模块，应该是这样，有问题可与我联系）
       val wdata    = Output(UInt(32.W))
     }
+    //传递至EX的数据旁路输出
+    val mem_bypass_data  = Output(UInt(32.W))
+    val mem_bypass_valid = Output(Bool())
 
     val M_master_mem_sel = Input(Bool())
     val M_slave_mem_sel  = Input(Bool())
@@ -94,6 +97,7 @@ class MEM extends Module {
     funct3Reg := 0.U
     wdataReg  := 0.U
     state     := sIdle
+    io.mem_bypass_valid := false.B
   }.otherwise {
     switch(state) {
       is(sIdle) {
@@ -111,6 +115,21 @@ class MEM extends Module {
         val index = getIndex(addrReg)
         val tag   = getTag(addrReg)
         val hit   = valid(index) && (tags(index) === tag) //组合逻辑判断是否命中
+        
+        //添加MEM至EX阶段关于load指令的数据通路
+        when(hit && io.cpu.mem_en && (opReg === "b0000011".U)) {
+          io.ex_bypass_valid := true.B
+          io.ex_bypass_data := MuxLookup(funct3Reg, 0.U, Seq(
+          "b000".U -> Cat(Fill(24, dataRam.read(ramAddr)(7)), dataRam.read(ramAddr)(7,0)),
+          "b001".U -> Cat(Fill(16, dataRam.read(ramAddr)(15)), dataRam.read(ramAddr)(15,0)),
+          "b010".U -> dataRam.read(ramAddr),
+          "b100".U -> Cat(0.U(24.W), dataRam.read(ramAddr)(7,0)),
+          "b101".U -> Cat(0.U(16.W), dataRam.read(ramAddr)(15,0))
+          ))
+        }.otherwise {
+          io.ex_bypass_valid := false.B
+          io.ex_bypass_data := DontCare
+        } 
 
         when(hit) {
           val wordOffset = getWordOffset(addrReg)
