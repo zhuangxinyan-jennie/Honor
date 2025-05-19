@@ -16,23 +16,22 @@ class MEM extends Module {
     }
     
     val sram = new Bundle {
+      //该wen信号与memAccess相连，已经在MEM中连接好，无需与其他模块相连
+      val wen      = Input(UInt(4.W))
       //以下与助教提供的mem.scala模块相连
       val rdata    = Input(UInt(32.W)) 
-      val ready    = Input(Bool()) 
       val en       = Output(Bool()) 
-      val rlen     = Output(UInt(2.W)) 
-      val wen      = Output(UInt(4.W))
+      val funct3   = Output(UInt(3.W))
       val addr     = Output(UInt(32.W)) //认定是物理地址，故无需TLB或者地址转换（根据助教提供的mem.scala模块，应该是这样，有问题可与我联系）
       val wdata    = Output(UInt(32.W))
     }
+    
     //传递至EX的数据旁路输出
     val mem_bypass_data  = Output(UInt(32.W))
     val mem_bypass_valid = Output(Bool())
 
     val M_master_mem_sel = Input(Bool())
     val M_slave_mem_sel  = Input(Bool())
-    val M_master_except  = Input(new ExceptBus)
-    val M_slave_except   = Input(new ExceptBus)
     val flush            = Input(Bool())
   })
 
@@ -79,14 +78,12 @@ class MEM extends Module {
   memAccess.io.data_sram_rdata := io.sram.rdata
   memAccess.io.M_master_mem_sel := io.M_master_mem_sel
   memAccess.io.M_slave_mem_sel  := io.M_slave_mem_sel
-  memAccess.io.M_master_except  := io.M_master_except
-  memAccess.io.M_slave_except   := io.M_slave_except
 
   io.sram.en    := memAccess.io.data_sram_en
-  io.sram.rlen  := memAccess.io.data_sram_rlen
   io.sram.wen   := memAccess.io.data_sram_wen
   io.sram.addr  := memAccess.io.data_sram_addr
   io.sram.wdata := memAccess.io.data_sram_wdata
+  io.sram.funct3:= cpu.mem_funct3
 
   // 状态机
   when(io.flush) { //冲刷信号优先级最高
@@ -180,12 +177,10 @@ class MEM extends Module {
         memAccess.io.mem_addr := lineAddr + (wordCount << 2)
         memAccess.io.mem_wdata := dataRam.read((savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordCount)
   
-        when(io.sram.ready) {
-          wordCount := wordCount + 1.U
-          when(wordCount === (LINE_WORDS-1).U) {
-            dirty(savedIndex) := false.B // 清除脏位
-            state := sFetchLine     // 进入加载新行状态
-          }
+        wordCount := wordCount + 1.U
+        when(wordCount === (LINE_WORDS-1).U) {
+          dirty(savedIndex) := false.B // 清除脏位
+          state := sFetchLine     // 进入加载新行状态
         }
       }
 
@@ -194,16 +189,14 @@ class MEM extends Module {
         memAccess.io.mem_op := "b0000011".U // Load word
         memAccess.io.mem_addr := lineAddr + (wordCount << 2)
 
-        when(io.sram.ready) {
-          val index = getIndex(lineAddr)
-          dataRam.write((savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordCount, io.sram.rdata)
-          wordCount := wordCount + 1.U
-          when(wordCount === (LINE_WORDS-1).U) {
-            valid(savedIndex) := true.B
-            tags(savedIndex)  := getTag(lineAddr)
-            dirty(savedIndex) := false.B
-            state := Mux(opReg === "b0100011".U, sStoreAfterMiss, sCheckCache)
-          }
+        val index = getIndex(lineAddr)
+        dataRam.write((savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordCount, io.sram.rdata)
+        wordCount := wordCount + 1.U
+        when(wordCount === (LINE_WORDS-1).U) {
+          valid(savedIndex) := true.B
+          tags(savedIndex)  := getTag(lineAddr)
+          dirty(savedIndex) := false.B
+          state := Mux(opReg === "b0100011".U, sStoreAfterMiss, sCheckCache)
         }
       }
 
