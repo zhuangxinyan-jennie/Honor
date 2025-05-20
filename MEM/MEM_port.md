@@ -3,8 +3,10 @@
 | 端口名称         | 方向 | 位宽       | 功能描述                                                   |
 | ---------------- | ---- | ---------- | -----------------------------------------------------    |
 | cpu.mem_en           | I    | 1          | M 阶段是否有访存操作                                  |
-| cpu.mem_op           | I    | 7          | M 阶段访存操作类型                                    |
-| cpu.mem_funct3       | I    | 3          | M 阶段访存操作码                                      |
+| cpu.mem_read         | I    | 1          | M 阶段执行load操作                                    | 
+| cpu.mem_write        | I    | 1          | M 阶段执行store操作                                   |
+| cpu.mem_type         | I    | 3          | M 阶段进行的访存操作指示 H B W NONE                    |
+| cpu.mem_unsigned     | I    | 1          | M 阶段是否进行有符号存取                               |
 | cpu.mem_wdata        | I    | 32         | M 阶段需要写入 Cache 的数据                           |
 | cpu.mem_addr         | I    | 32         | M 阶段访存的物理地址                                  |
 | cpu.mem_ready        | O    | 1          | M阶段工作是否完成，用于不定周期访存控制                 |
