@@ -55,7 +55,7 @@ class cop0_info extends Bundle {
   val sel_addr = UInt(3.W)
 }
 
-class ID_EX extends Module {
+class id_ex extends Module {
   val io = IO(new Bundle {
     // 控制信号
     val clear1 = Input(Bool())

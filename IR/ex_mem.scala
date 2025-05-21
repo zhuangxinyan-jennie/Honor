@@ -159,7 +159,7 @@ class ex_mem extends Module {
   val slaveReg = RegInit(0.U.asTypeOf(new SlaveRegBundle))
 
   // Master通道寄存器逻辑
-  when(reset | io.clear1) {
+  when(reset.asBool() | io.clear1) {
     masterReg := 0.U.asTypeOf(new MasterRegBundle)
   }.elsewhen(io.ena1) {
     masterReg.mem_en := io.E_mem_en
@@ -184,7 +184,7 @@ class ex_mem extends Module {
   }
 
   // Slave通道寄存器逻辑
-  when(reset | io.clear2) {
+  when(reset.asBool() | io.clear2) {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena2) {
     slaveReg.ctrl_sign := io.E_slave_ctrl_sign

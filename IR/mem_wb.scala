@@ -2,7 +2,7 @@ import chisel3._
 import chisel3.util._
 
 // 根据 defines.vh 定义对应的 Chisel Bundles
-class ctrl_sign extends Bundle {
+/*class ctrl_sign extends Bundle {
   val aluop = UInt(8.W)
   val flush_all = Bool()
   val read_rs = Bool()
@@ -23,7 +23,7 @@ class ctrl_sign extends Bundle {
   val tlb_fence = Bool()
   val mul_en = Bool()
   val div_en = Bool()
-}
+}*/
 
 class except_bus extends Bundle {
   val if_adel = Bool()
@@ -124,7 +124,7 @@ class mem_wb extends Module {
   val slaveReg = RegInit(0.U.asTypeOf(new SlaveRegBundle))
 
   // Master通道寄存器逻辑
-  when(reset || io.clear1) {
+  when(reset.asBool() | io.clear1) {
     masterReg := 0.U.asTypeOf(new MasterRegBundle)
   }.elsewhen(io.ena1) {
     // masterReg.ctrl_sign := io.M_master_ctrl_sign
@@ -141,7 +141,7 @@ class mem_wb extends Module {
   }
 
   // Slave通道寄存器逻辑
-  when(reset || io.clear2) {
+  when(reset.asBool() | io.clear2) {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena2) {
     // slaveReg.ctrl_sign := io.M_slave_ctrl_sign
