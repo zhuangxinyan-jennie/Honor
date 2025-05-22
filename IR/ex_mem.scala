@@ -25,25 +25,6 @@ class ctrl_sign extends Bundle {
   val div_en = Bool()
 }
 
-class except_bus extends Bundle {
-  val if_adel = Bool()
-  val if_tlbl = Bool()
-  val if_tlbrf = Bool()
-  val id_ri = Bool()
-  val id_syscall = Bool()
-  val id_break = Bool()
-  val id_eret = Bool()
-  val id_int = Bool()
-  val id_cpu = Bool()
-  val ex_ov = Bool()
-  val ex_adel = Bool()
-  val ex_ades = Bool()
-  val ex_tlbl = Bool()
-  val ex_tlbs = Bool()
-  val ex_tlbm = Bool()
-  val ex_tlbrf = Bool()
-  val ex_trap = Bool()
-}
 
 class ex_mem extends Module {
   val io = IO(new Bundle {
@@ -59,7 +40,6 @@ class ex_mem extends Module {
     val E_mem_op = Input(UInt(6.W))
     val E_mem_addr = Input(UInt(32.W))
     val E_mem_wdata = Input(UInt(32.W))
-    val E_mem_va = Input(UInt(32.W))
     
     val M_mem_en = Output(Bool())
     val M_mem_ren = Output(Bool())
@@ -67,11 +47,9 @@ class ex_mem extends Module {
     val M_mem_op = Output(UInt(6.W))
     val M_mem_addr = Output(UInt(32.W))
     val M_mem_wdata = Output(UInt(32.W))
-    val M_mem_va = Output(UInt(32.W))
 
     // Master通道输入
     val E_master_ctrl_sign = Input(new ctrl_sign())
-    val E_master_except = Input(new except_bus())
     val E_master_reg_wen = Input(Bool())
     val E_master_mem_sel = Input(Bool())
     val E_master_is_in_delayslot = Input(Bool())
@@ -85,7 +63,6 @@ class ex_mem extends Module {
     
     // Slave通道输入
     val E_slave_ctrl_sign = Input(new ctrl_sign())
-    val E_slave_except = Input(new except_bus())
     val E_slave_reg_wen = Input(Bool())
     val E_slave_mem_sel = Input(Bool())
     val E_slave_is_in_delayslot = Input(Bool())
@@ -96,7 +73,6 @@ class ex_mem extends Module {
 
     // Master通道输出
     val M_master_ctrl_sign = Output(new ctrl_sign())
-    val M_master_except = Output(new except_bus())
     val M_master_reg_wen = Output(Bool())
     val M_master_mem_sel = Output(Bool())
     val M_master_is_in_delayslot = Output(Bool())
@@ -110,7 +86,6 @@ class ex_mem extends Module {
     
     // Slave通道输出
     val M_slave_ctrl_sign = Output(new ctrl_sign())
-    val M_slave_except = Output(new except_bus())
     val M_slave_reg_wen = Output(Bool())
     val M_slave_mem_sel = Output(Bool())
     val M_slave_is_in_delayslot = Output(Bool())
@@ -128,9 +103,7 @@ class ex_mem extends Module {
     val mem_op = UInt(6.W)
     val mem_addr = UInt(32.W)
     val mem_wdata = UInt(32.W)
-    val mem_va = UInt(32.W)
     val ctrl_sign = new ctrl_sign()
-    val except = new except_bus()
     val reg_wen = Bool()
     val mem_sel = Bool()
     val is_in_delayslot = Bool()
@@ -147,7 +120,6 @@ class ex_mem extends Module {
   // 定义Slave通道寄存器结构体
   class SlaveRegBundle extends Bundle {
     val ctrl_sign = new ctrl_sign()
-    val except = new except_bus()
     val reg_wen = Bool()
     val mem_sel = Bool()
     val is_in_delayslot = Bool()
@@ -168,9 +140,7 @@ class ex_mem extends Module {
     masterReg.mem_op := io.E_mem_op
     masterReg.mem_addr := io.E_mem_addr
     masterReg.mem_wdata := io.E_mem_wdata
-    masterReg.mem_va := io.E_mem_va
     masterReg.ctrl_sign := io.E_master_ctrl_sign
-    masterReg.except := io.E_master_except
     masterReg.reg_wen := io.E_master_reg_wen
     masterReg.mem_sel := io.E_master_mem_sel
     masterReg.is_in_delayslot := io.E_master_is_in_delayslot
@@ -188,7 +158,6 @@ class ex_mem extends Module {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena2) {
     slaveReg.ctrl_sign := io.E_slave_ctrl_sign
-    slaveReg.except := io.E_slave_except
     slaveReg.reg_wen := io.E_slave_reg_wen
     slaveReg.mem_sel := io.E_slave_mem_sel
     slaveReg.is_in_delayslot := io.E_slave_is_in_delayslot
@@ -198,17 +167,15 @@ class ex_mem extends Module {
     slaveReg.alu_res := io.E_slave_alu_res
   }
 
-  // 连接Master输出
   io.M_mem_en := masterReg.mem_en
   io.M_mem_ren := masterReg.mem_ren
   io.M_mem_wen := masterReg.mem_wen
   io.M_mem_op := masterReg.mem_op
   io.M_mem_addr := masterReg.mem_addr
   io.M_mem_wdata := masterReg.mem_wdata
-  io.M_mem_va := masterReg.mem_va
 
+  // 连接Master输出
   io.M_master_ctrl_sign := masterReg.ctrl_sign
-  io.M_master_except := masterReg.except
   io.M_master_reg_wen := masterReg.reg_wen
   io.M_master_mem_sel := masterReg.mem_sel
   io.M_master_is_in_delayslot := masterReg.is_in_delayslot
@@ -222,7 +189,6 @@ class ex_mem extends Module {
 
   // 连接Slave输出
   io.M_slave_ctrl_sign := slaveReg.ctrl_sign
-  io.M_slave_except := slaveReg.except
   io.M_slave_reg_wen := slaveReg.reg_wen
   io.M_slave_mem_sel := slaveReg.mem_sel
   io.M_slave_is_in_delayslot := slaveReg.is_in_delayslot
