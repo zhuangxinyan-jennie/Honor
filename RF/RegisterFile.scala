@@ -20,10 +20,8 @@ class RegisterFileIO extends Bundle {
   val wen2   = Input(Bool())
   val wa2    = Input(UInt(5.W))
   val wd2    = Input(UInt(32.W))
-  // Reset
-  val rst    = Input(Bool())
-  // Clock (conflict with ChiselTest)
-  // val clk    = Input(Clock()) 
+  // Clock 
+  val clk    = Input(Clock()) 
 }
 
 class RegisterFile extends Module {
@@ -31,10 +29,6 @@ class RegisterFile extends Module {
   // 32 * 32 bits Register
   val regs = RegInit(VecInit(Seq.fill(32)(0.U(32.W))))
 
-  // Reset
-  when(io.rst) {
-    regs := VecInit(Seq.fill(32)(0.U(32.W)))
-} .otherwise {
   // Write：slave cover master
   when(io.wen2 && io.wa2 =/= 0.U) {
     regs(io.wa2) := io.wd2
@@ -42,7 +36,7 @@ class RegisterFile extends Module {
   when(io.wen1 && io.wa1 =/= 0.U && (!io.wen2 || io.wa1 =/= io.wa2)) {
     regs(io.wa1) := io.wd1
   }
-}
+
   // x0 always return 0 
   // Slave > Master > old
   def bypassRead(addr: UInt): UInt = {
