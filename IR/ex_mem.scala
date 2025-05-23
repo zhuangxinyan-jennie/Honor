@@ -52,20 +52,15 @@ class ex_mem extends Module {
     val E_master_ctrl_sign = Input(new ctrl_sign())
     val E_master_reg_wen = Input(Bool())
     val E_master_mem_sel = Input(Bool())
-    val E_master_is_in_delayslot = Input(Bool())
     val E_master_reg_waddr = Input(UInt(5.W))
     val E_master_inst = Input(UInt(32.W))
     val E_master_alu_res = Input(UInt(32.W))
     val E_master_pc = Input(UInt(32.W))
-    val E_master_debug_cp0_count = Input(UInt(32.W))
-    val E_master_debug_cp0_random = Input(UInt(32.W))
-    val E_master_debug_cp0_cause = Input(UInt(32.W))
     
     // Slave通道输入
     val E_slave_ctrl_sign = Input(new ctrl_sign())
     val E_slave_reg_wen = Input(Bool())
     val E_slave_mem_sel = Input(Bool())
-    val E_slave_is_in_delayslot = Input(Bool())
     val E_slave_reg_waddr = Input(UInt(5.W))
     val E_slave_pc = Input(UInt(32.W))
     val E_slave_inst = Input(UInt(32.W))
@@ -75,20 +70,15 @@ class ex_mem extends Module {
     val M_master_ctrl_sign = Output(new ctrl_sign())
     val M_master_reg_wen = Output(Bool())
     val M_master_mem_sel = Output(Bool())
-    val M_master_is_in_delayslot = Output(Bool())
     val M_master_reg_waddr = Output(UInt(5.W))
     val M_master_inst = Output(UInt(32.W))
     val M_master_alu_res = Output(UInt(32.W))
     val M_master_pc = Output(UInt(32.W))
-    val M_master_debug_cp0_count = Output(UInt(32.W))
-    val M_master_debug_cp0_random = Output(UInt(32.W))
-    val M_master_debug_cp0_cause = Output(UInt(32.W))
-    
+
     // Slave通道输出
     val M_slave_ctrl_sign = Output(new ctrl_sign())
     val M_slave_reg_wen = Output(Bool())
     val M_slave_mem_sel = Output(Bool())
-    val M_slave_is_in_delayslot = Output(Bool())
     val M_slave_reg_waddr = Output(UInt(5.W))
     val M_slave_pc = Output(UInt(32.W))
     val M_slave_inst = Output(UInt(32.W))
@@ -106,14 +96,10 @@ class ex_mem extends Module {
     val ctrl_sign = new ctrl_sign()
     val reg_wen = Bool()
     val mem_sel = Bool()
-    val is_in_delayslot = Bool()
     val reg_waddr = UInt(5.W)
     val inst = UInt(32.W)
     val alu_res = UInt(32.W)
     val pc = UInt(32.W)
-    val debug_cp0_count = UInt(32.W)
-    val debug_cp0_random = UInt(32.W)
-    val debug_cp0_cause = UInt(32.W)
   }
   val masterReg = RegInit(0.U.asTypeOf(new MasterRegBundle))
 
@@ -122,7 +108,6 @@ class ex_mem extends Module {
     val ctrl_sign = new ctrl_sign()
     val reg_wen = Bool()
     val mem_sel = Bool()
-    val is_in_delayslot = Bool()
     val reg_waddr = UInt(5.W)
     val pc = UInt(32.W)
     val inst = UInt(32.W)
@@ -143,14 +128,10 @@ class ex_mem extends Module {
     masterReg.ctrl_sign := io.E_master_ctrl_sign
     masterReg.reg_wen := io.E_master_reg_wen
     masterReg.mem_sel := io.E_master_mem_sel
-    masterReg.is_in_delayslot := io.E_master_is_in_delayslot
     masterReg.reg_waddr := io.E_master_reg_waddr
     masterReg.inst := io.E_master_inst
     masterReg.alu_res := io.E_master_alu_res
     masterReg.pc := io.E_master_pc
-    masterReg.debug_cp0_count := io.E_master_debug_cp0_count
-    masterReg.debug_cp0_random := io.E_master_debug_cp0_random
-    masterReg.debug_cp0_cause := io.E_master_debug_cp0_cause
   }
 
   // Slave通道寄存器逻辑
@@ -160,7 +141,6 @@ class ex_mem extends Module {
     slaveReg.ctrl_sign := io.E_slave_ctrl_sign
     slaveReg.reg_wen := io.E_slave_reg_wen
     slaveReg.mem_sel := io.E_slave_mem_sel
-    slaveReg.is_in_delayslot := io.E_slave_is_in_delayslot
     slaveReg.reg_waddr := io.E_slave_reg_waddr
     slaveReg.pc := io.E_slave_pc
     slaveReg.inst := io.E_slave_inst
@@ -178,20 +158,15 @@ class ex_mem extends Module {
   io.M_master_ctrl_sign := masterReg.ctrl_sign
   io.M_master_reg_wen := masterReg.reg_wen
   io.M_master_mem_sel := masterReg.mem_sel
-  io.M_master_is_in_delayslot := masterReg.is_in_delayslot
   io.M_master_reg_waddr := masterReg.reg_waddr
   io.M_master_inst := masterReg.inst
   io.M_master_alu_res := masterReg.alu_res
   io.M_master_pc := masterReg.pc
-  io.M_master_debug_cp0_count := masterReg.debug_cp0_count
-  io.M_master_debug_cp0_random := masterReg.debug_cp0_random
-  io.M_master_debug_cp0_cause := masterReg.debug_cp0_cause
 
   // 连接Slave输出
   io.M_slave_ctrl_sign := slaveReg.ctrl_sign
   io.M_slave_reg_wen := slaveReg.reg_wen
   io.M_slave_mem_sel := slaveReg.mem_sel
-  io.M_slave_is_in_delayslot := slaveReg.is_in_delayslot
   io.M_slave_reg_waddr := slaveReg.reg_waddr
   io.M_slave_pc := slaveReg.pc
   io.M_slave_inst := slaveReg.inst

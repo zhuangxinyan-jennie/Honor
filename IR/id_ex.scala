@@ -25,17 +25,6 @@ class ctrl_sign extends Bundle {
   val div_en = Bool()
 }
 
-
-class cop0_info extends Bundle {
-  val mtc0_en = Bool()
-  val TLBP = Bool()
-  val TLBR = Bool()
-  val TLBWI = Bool()
-  val TLBWR = Bool()
-  val reg_addr = UInt(5.W)
-  val sel_addr = UInt(3.W)
-}
-
 class id_ex extends Module {
   val io = IO(new Bundle {
     // 控制信号
@@ -46,9 +35,7 @@ class id_ex extends Module {
     
     // Master通道输入
     val D_master_ctrl_sign = Input(new ctrl_sign())
-    val D_master_cop0_info = Input(new cop0_info())
     val D_master_is_link_pc8 = Input(Bool())
-    val D_master_is_in_delayslot = Input(Bool())
     val D_master_is_branch = Input(Bool())
     val D_master_pred_take = Input(Bool())
     val D_master_jump_conflict = Input(Bool())
@@ -70,8 +57,6 @@ class id_ex extends Module {
     
     // Slave通道输入
     val D_slave_ctrl_sign = Input(new ctrl_sign())
-    val D_slave_cop0_info = Input(new cop0_info())
-    val D_slave_is_in_delayslot = Input(Bool())
     val D_slave_rs = Input(UInt(5.W))
     val D_slave_rt = Input(UInt(5.W))
     val D_slave_reg_waddr = Input(UInt(5.W))
@@ -86,9 +71,7 @@ class id_ex extends Module {
     
     // Master通道输出
     val E_master_ctrl_sign = Output(new ctrl_sign())
-    val E_master_cop0_info = Output(new cop0_info())
     val E_master_is_link_pc8 = Output(Bool())
-    val E_master_is_in_delayslot = Output(Bool())
     val E_master_is_branch = Output(Bool())
     val E_master_pred_take = Output(Bool())
     val E_master_jump_conflict = Output(Bool())
@@ -110,8 +93,6 @@ class id_ex extends Module {
     
     // Slave通道输出
     val E_slave_ctrl_sign = Output(new ctrl_sign())
-    val E_slave_cop0_info = Output(new cop0_info())
-    val E_slave_is_in_delayslot = Output(Bool())
     val E_slave_rs = Output(UInt(5.W))
     val E_slave_rt = Output(UInt(5.W))
     val E_slave_reg_waddr = Output(UInt(5.W))
@@ -128,9 +109,7 @@ class id_ex extends Module {
     // 定义Master通道寄存器结构体
   class MasterRegBundle extends Bundle {
     val ctrl_sign = new ctrl_sign()
-    val cop0_info = new cop0_info()
     val is_link_pc8 = Bool()
-    val is_in_delayslot = Bool()
     val is_branch = Bool()
     val pred_take = Bool()
     val jump_conflict = Bool()
@@ -155,8 +134,6 @@ class id_ex extends Module {
   // 定义Slave通道寄存器结构体
   class SlaveRegBundle extends Bundle {
     val ctrl_sign = new ctrl_sign()
-    val cop0_info = new cop0_info()
-    val is_in_delayslot = Bool()
     val rs = UInt(5.W)
     val rt = UInt(5.W)
     val reg_waddr = UInt(5.W)
@@ -176,9 +153,7 @@ class id_ex extends Module {
     masterReg := 0.U.asTypeOf(new MasterRegBundle)
   }.elsewhen(io.ena1) {
     masterReg.ctrl_sign := io.D_master_ctrl_sign
-    masterReg.cop0_info := io.D_master_cop0_info
     masterReg.is_link_pc8 := io.D_master_is_link_pc8
-    masterReg.is_in_delayslot := io.D_master_is_in_delayslot
     masterReg.is_branch := io.D_master_is_branch
     masterReg.pred_take := io.D_master_pred_take
     masterReg.jump_conflict := io.D_master_jump_conflict
@@ -204,8 +179,6 @@ class id_ex extends Module {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena2) {
     slaveReg.ctrl_sign := io.D_slave_ctrl_sign
-    slaveReg.cop0_info := io.D_slave_cop0_info
-    slaveReg.is_in_delayslot := io.D_slave_is_in_delayslot
     slaveReg.rs := io.D_slave_rs
     slaveReg.rt := io.D_slave_rt
     slaveReg.reg_waddr := io.D_slave_reg_waddr
@@ -221,9 +194,7 @@ class id_ex extends Module {
 
   // 连接寄存器输出到IO
   io.E_master_ctrl_sign := masterReg.ctrl_sign
-  io.E_master_cop0_info := masterReg.cop0_info
   io.E_master_is_link_pc8 := masterReg.is_link_pc8
-  io.E_master_is_in_delayslot := masterReg.is_in_delayslot
   io.E_master_is_branch := masterReg.is_branch
   io.E_master_pred_take := masterReg.pred_take
   io.E_master_jump_conflict := masterReg.jump_conflict
@@ -244,8 +215,6 @@ class id_ex extends Module {
   io.E_master_branch_target := masterReg.branch_target
 
   io.E_slave_ctrl_sign := slaveReg.ctrl_sign
-  io.E_slave_cop0_info := slaveReg.cop0_info
-  io.E_slave_is_in_delayslot := slaveReg.is_in_delayslot
   io.E_slave_rs := slaveReg.rs
   io.E_slave_rt := slaveReg.rt
   io.E_slave_reg_waddr := slaveReg.reg_waddr

@@ -40,10 +40,6 @@ class mem_wb extends Module {
     val M_master_inst = Input(UInt(32.W))
     val M_master_pc = Input(UInt(32.W))
     val M_master_reg_wdata = Input(UInt(32.W))
-    val M_master_debug_cp0_count = Input(UInt(32.W))
-    val M_master_debug_cp0_random = Input(UInt(32.W))
-    val M_master_debug_cp0_cause = Input(UInt(32.W))
-    val M_master_debug_int = Input(Bool())
     
     // val W_master_ctrl_sign = Output(new ctrl_sign())
     val W_master_reg_wen = Output(Bool())
@@ -51,10 +47,6 @@ class mem_wb extends Module {
     val W_master_inst = Output(UInt(32.W))
     val W_master_pc = Output(UInt(32.W))
     val W_master_reg_wdata = Output(UInt(32.W))
-    val W_master_debug_cp0_count = Output(UInt(32.W))
-    val W_master_debug_cp0_random = Output(UInt(32.W))
-    val W_master_debug_cp0_cause = Output(UInt(32.W))
-    val W_master_debug_int = Output(Bool())
 
     // Slave通道信号
     // val M_slave_ctrl_sign = Input(new ctrl_sign())
@@ -80,10 +72,6 @@ class mem_wb extends Module {
     val inst = UInt(32.W)
     val pc = UInt(32.W)
     val reg_wdata = UInt(32.W)
-    val debug_cp0_count = UInt(32.W)
-    val debug_cp0_random = UInt(32.W)
-    val debug_cp0_cause = UInt(32.W)
-    val debug_int = Bool()
   }
   val masterReg = RegInit(0.U.asTypeOf(new MasterRegBundle))
 
@@ -108,10 +96,6 @@ class mem_wb extends Module {
     masterReg.inst := io.M_master_inst
     masterReg.pc := io.M_master_pc
     masterReg.reg_wdata := io.M_master_reg_wdata
-    masterReg.debug_cp0_count := io.M_master_debug_cp0_count
-    masterReg.debug_cp0_random := io.M_master_debug_cp0_random
-    masterReg.debug_cp0_cause := io.M_master_debug_cp0_cause
-    masterReg.debug_int := io.M_master_debug_int
   }
 
   // Slave通道寄存器逻辑
@@ -133,10 +117,6 @@ class mem_wb extends Module {
   io.W_master_inst := masterReg.inst
   io.W_master_pc := masterReg.pc
   io.W_master_reg_wdata := masterReg.reg_wdata
-  io.W_master_debug_cp0_count := masterReg.debug_cp0_count
-  io.W_master_debug_cp0_random := masterReg.debug_cp0_random
-  io.W_master_debug_cp0_cause := masterReg.debug_cp0_cause
-  io.W_master_debug_int := masterReg.debug_int
 
   // io.W_slave_ctrl_sign := slaveReg.ctrl_sign
   io.W_slave_reg_wen := slaveReg.reg_wen
