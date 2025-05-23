@@ -23,27 +23,8 @@ import chisel3.util._
   val tlb_fence = Bool()
   val mul_en = Bool()
   val div_en = Bool()
-}*/
-
-class except_bus extends Bundle {
-  val if_adel = Bool()
-  val if_tlbl = Bool()
-  val if_tlbrf = Bool()
-  val id_ri = Bool()
-  val id_syscall = Bool()
-  val id_break = Bool()
-  val id_eret = Bool()
-  val id_int = Bool()
-  val id_cpu = Bool()
-  val ex_ov = Bool()
-  val ex_adel = Bool()
-  val ex_ades = Bool()
-  val ex_tlbl = Bool()
-  val ex_tlbs = Bool()
-  val ex_tlbm = Bool()
-  val ex_tlbrf = Bool()
-  val ex_trap = Bool()
 }
+*/
 
 class mem_wb extends Module {
   val io = IO(new Bundle {
@@ -54,7 +35,6 @@ class mem_wb extends Module {
 
     // Master通道信号
     // val M_master_ctrl_sign = Input(new ctrl_sign())
-    val M_master_except = Input(new except_bus())
     val M_master_reg_wen = Input(Bool())
     val M_master_reg_waddr = Input(UInt(5.W))
     val M_master_inst = Input(UInt(32.W))
@@ -66,7 +46,6 @@ class mem_wb extends Module {
     val M_master_debug_int = Input(Bool())
     
     // val W_master_ctrl_sign = Output(new ctrl_sign())
-    val W_master_except = Output(new except_bus())
     val W_master_reg_wen = Output(Bool())
     val W_master_reg_waddr = Output(UInt(5.W))
     val W_master_inst = Output(UInt(32.W))
@@ -79,7 +58,6 @@ class mem_wb extends Module {
 
     // Slave通道信号
     // val M_slave_ctrl_sign = Input(new ctrl_sign())
-    val M_slave_except = Input(new except_bus())
     val M_slave_reg_wen = Input(Bool())
     val M_slave_reg_waddr = Input(UInt(5.W))
     val M_slave_inst = Input(UInt(32.W))
@@ -87,7 +65,6 @@ class mem_wb extends Module {
     val M_slave_reg_wdata = Input(UInt(32.W))
     
     // val W_slave_ctrl_sign = Output(new ctrl_sign())
-    val W_slave_except = Output(new except_bus())
     val W_slave_reg_wen = Output(Bool())
     val W_slave_reg_waddr = Output(UInt(5.W))
     val W_slave_inst = Output(UInt(32.W))
@@ -98,7 +75,6 @@ class mem_wb extends Module {
   // 定义Master通道寄存器结构体
   class MasterRegBundle extends Bundle {
     // val ctrl_sign = new ctrl_sign()
-    val except = new except_bus()
     val reg_wen = Bool()
     val reg_waddr = UInt(5.W)
     val inst = UInt(32.W)
@@ -114,7 +90,6 @@ class mem_wb extends Module {
   // 定义Slave通道寄存器结构体
   class SlaveRegBundle extends Bundle {
     // val ctrl_sign = new ctrl_sign()
-    val except = new except_bus()
     val reg_wen = Bool()
     val reg_waddr = UInt(5.W)
     val inst = UInt(32.W)
@@ -128,7 +103,6 @@ class mem_wb extends Module {
     masterReg := 0.U.asTypeOf(new MasterRegBundle)
   }.elsewhen(io.ena1) {
     // masterReg.ctrl_sign := io.M_master_ctrl_sign
-    masterReg.except := io.M_master_except
     masterReg.reg_wen := io.M_master_reg_wen
     masterReg.reg_waddr := io.M_master_reg_waddr
     masterReg.inst := io.M_master_inst
@@ -145,7 +119,6 @@ class mem_wb extends Module {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena2) {
     // slaveReg.ctrl_sign := io.M_slave_ctrl_sign
-    slaveReg.except := io.M_slave_except
     slaveReg.reg_wen := io.M_slave_reg_wen
     slaveReg.reg_waddr := io.M_slave_reg_waddr
     slaveReg.inst := io.M_slave_inst
@@ -155,7 +128,6 @@ class mem_wb extends Module {
 
   // 连接输出
   // io.W_master_ctrl_sign := masterReg.ctrl_sign
-  io.W_master_except := masterReg.except
   io.W_master_reg_wen := masterReg.reg_wen
   io.W_master_reg_waddr := masterReg.reg_waddr
   io.W_master_inst := masterReg.inst
@@ -167,7 +139,6 @@ class mem_wb extends Module {
   io.W_master_debug_int := masterReg.debug_int
 
   // io.W_slave_ctrl_sign := slaveReg.ctrl_sign
-  io.W_slave_except := slaveReg.except
   io.W_slave_reg_wen := slaveReg.reg_wen
   io.W_slave_reg_waddr := slaveReg.reg_waddr
   io.W_slave_inst := slaveReg.inst

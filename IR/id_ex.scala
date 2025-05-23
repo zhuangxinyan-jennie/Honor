@@ -25,25 +25,6 @@ class ctrl_sign extends Bundle {
   val div_en = Bool()
 }
 
-class except_bus extends Bundle {
-  val if_adel = Bool()
-  val if_tlbl = Bool()
-  val if_tlbrf = Bool()
-  val id_ri = Bool()
-  val id_syscall = Bool()
-  val id_break = Bool()
-  val id_eret = Bool()
-  val id_int = Bool()
-  val id_cpu = Bool()
-  val ex_ov = Bool()
-  val ex_adel = Bool()
-  val ex_ades = Bool()
-  val ex_tlbl = Bool()
-  val ex_tlbs = Bool()
-  val ex_tlbm = Bool()
-  val ex_tlbrf = Bool()
-  val ex_trap = Bool()
-}
 
 class cop0_info extends Bundle {
   val mtc0_en = Bool()
@@ -65,7 +46,6 @@ class id_ex extends Module {
     
     // Master通道输入
     val D_master_ctrl_sign = Input(new ctrl_sign())
-    val D_master_except = Input(new except_bus())
     val D_master_cop0_info = Input(new cop0_info())
     val D_master_is_link_pc8 = Input(Bool())
     val D_master_is_in_delayslot = Input(Bool())
@@ -90,7 +70,6 @@ class id_ex extends Module {
     
     // Slave通道输入
     val D_slave_ctrl_sign = Input(new ctrl_sign())
-    val D_slave_except = Input(new except_bus())
     val D_slave_cop0_info = Input(new cop0_info())
     val D_slave_is_in_delayslot = Input(Bool())
     val D_slave_rs = Input(UInt(5.W))
@@ -107,7 +86,6 @@ class id_ex extends Module {
     
     // Master通道输出
     val E_master_ctrl_sign = Output(new ctrl_sign())
-    val E_master_except = Output(new except_bus())
     val E_master_cop0_info = Output(new cop0_info())
     val E_master_is_link_pc8 = Output(Bool())
     val E_master_is_in_delayslot = Output(Bool())
@@ -132,7 +110,6 @@ class id_ex extends Module {
     
     // Slave通道输出
     val E_slave_ctrl_sign = Output(new ctrl_sign())
-    val E_slave_except = Output(new except_bus())
     val E_slave_cop0_info = Output(new cop0_info())
     val E_slave_is_in_delayslot = Output(Bool())
     val E_slave_rs = Output(UInt(5.W))
@@ -151,7 +128,6 @@ class id_ex extends Module {
     // 定义Master通道寄存器结构体
   class MasterRegBundle extends Bundle {
     val ctrl_sign = new ctrl_sign()
-    val except = new except_bus()
     val cop0_info = new cop0_info()
     val is_link_pc8 = Bool()
     val is_in_delayslot = Bool()
@@ -179,7 +155,6 @@ class id_ex extends Module {
   // 定义Slave通道寄存器结构体
   class SlaveRegBundle extends Bundle {
     val ctrl_sign = new ctrl_sign()
-    val except = new except_bus()
     val cop0_info = new cop0_info()
     val is_in_delayslot = Bool()
     val rs = UInt(5.W)
@@ -201,7 +176,6 @@ class id_ex extends Module {
     masterReg := 0.U.asTypeOf(new MasterRegBundle)
   }.elsewhen(io.ena1) {
     masterReg.ctrl_sign := io.D_master_ctrl_sign
-    masterReg.except := io.D_master_except
     masterReg.cop0_info := io.D_master_cop0_info
     masterReg.is_link_pc8 := io.D_master_is_link_pc8
     masterReg.is_in_delayslot := io.D_master_is_in_delayslot
@@ -230,7 +204,6 @@ class id_ex extends Module {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena2) {
     slaveReg.ctrl_sign := io.D_slave_ctrl_sign
-    slaveReg.except := io.D_slave_except
     slaveReg.cop0_info := io.D_slave_cop0_info
     slaveReg.is_in_delayslot := io.D_slave_is_in_delayslot
     slaveReg.rs := io.D_slave_rs
@@ -248,7 +221,6 @@ class id_ex extends Module {
 
   // 连接寄存器输出到IO
   io.E_master_ctrl_sign := masterReg.ctrl_sign
-  io.E_master_except := masterReg.except
   io.E_master_cop0_info := masterReg.cop0_info
   io.E_master_is_link_pc8 := masterReg.is_link_pc8
   io.E_master_is_in_delayslot := masterReg.is_in_delayslot
@@ -272,7 +244,6 @@ class id_ex extends Module {
   io.E_master_branch_target := masterReg.branch_target
 
   io.E_slave_ctrl_sign := slaveReg.ctrl_sign
-  io.E_slave_except := slaveReg.except
   io.E_slave_cop0_info := slaveReg.cop0_info
   io.E_slave_is_in_delayslot := slaveReg.is_in_delayslot
   io.E_slave_rs := slaveReg.rs
