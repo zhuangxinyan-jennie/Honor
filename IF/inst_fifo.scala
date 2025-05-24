@@ -47,7 +47,7 @@ class InstFifo extends Module {
   }
   
   // 同步复位
-  withReset(io.reset) {
+  withReset(reset) {
     val lines = Reg(Vec(16, new FifoEntry)) // 存储条目
   } 
   
