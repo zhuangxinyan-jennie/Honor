@@ -88,8 +88,12 @@ class InstFifo extends Module {
       read_ptr := read_ptr + 2.U
     }.elsewhen(io.read_en1 && count > 0.U) {
       read_ptr := read_ptr + 1.U
-    }
-  }  // i_stall为高时，省略else分支（保持read_ptr不变）
+    }.otherwise {
+    read_ptr := read_ptr  // 显式保持
+  }
+}.otherwise {
+  read_ptr := read_ptr    //显式保持
+}
   
   // 计数器（同步）
   when(io.fifo_rst) {
