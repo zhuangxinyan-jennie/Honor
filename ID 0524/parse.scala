@@ -34,33 +34,36 @@ class BaseDecode extends Module {
   val alu_op_zero = 3.U(2.W)
 
   // ALU操作类型常量
-  val ALU_ADD  = 0.U(5.W)  // 加法：ADD/ADDI/LOAD/STORE/AUIPC
-  val ALU_SUB  = 1.U(5.W)  // 减法：SUB/分支比较
-  val ALU_SLL  = 2.U(5.W)  // 逻辑左移：SLL/SLLI
-  val ALU_SLT  = 3.U(5.W)  // 有符号小于：SLT/SLTI/BLT/BGE
-  val ALU_SLTU = 4.U(5.W)  // 无符号小于：SLTU/SLTIU/BLTU/BGEU
-  val ALU_XOR  = 5.U(5.W)  // 异或：XOR/XORI
-  val ALU_SRL  = 6.U(5.W)  // 逻辑右移：SRL/SRLI
-  val ALU_SRA  = 7.U(5.W)  // 算术右移：SRA/SRAI
-  val ALU_OR   = 8.U(5.W)  // 或：OR/ORI
-  val ALU_AND  = 9.U(5.W)  // 与：AND/ANDI
-  val ALU_COPY = 10.U(5.W) // 直接传递操作数1：LUI
-  val ALU_NONE = 11.U(5.W) // 不需要ALU运算
-  val BR_BEQ = 12.U(5.W)   // 分支跳转
-  val BR_BNE = 13.U(5.W)   // 分支跳转
-  val BR_BLT = 14.U(5.W)   // 分支跳转
-  val BR_BGE = 15.U(5.W)   // 分支跳转
-  val BR_BLTU = 16.U(5.W)  // 分支跳转
-  val BR_BGEU = 17.U(5.W)  // 分支跳转
-  val ALU_CSR_W = 18.U(5.W) // CSR写入
-  val ALU_MUL    = 19.U(5.W) //补充乘除法单元
-  val ALU_MULH   = 20.U(5.W)
-  val ALU_MULHSU = 21.U(5.W)
-  val ALU_MULHU  = 22.U(5.W)
-  val ALU_DIV    = 23.U(5.W)
-  val ALU_DIVU   = 24.U(5.W)
-  val ALU_REM    = 25.U(5.W)
-  val ALU_REMU   = 26.U(5.W)
+  val ALU_ADD  = 0.U(5.W)  // 加法ADD/ADDI/LOAD/STORE/AUIPC
+  val ALU_SUB  = 1.U(5.W)  // 减法SUB/��֧�Ƚ�
+  val ALU_SLL  = 2.U(5.W)  // 左移SLL/SLLI
+  val ALU_SLT  = 3.U(5.W)  // 有符号比较SLT/SLTI/BLT/BGE
+  val ALU_SLTU = 4.U(5.W)  // 无符号比较SLTU/SLTIU/BLTU/BGEU
+  val ALU_XOR  = 5.U(5.W)  // 异或XOR/XORI
+  val ALU_SRL  = 6.U(5.W)  // 右移SRL/SRLI
+  val ALU_SRA  = 7.U(5.W)  // 算术右移SRA/SRAI
+  val ALU_OR   = 8.U(5.W)  // 或OR/ORI
+  val ALU_AND  = 9.U(5.W)  // 与AND/ANDI
+  val ALU_LUI = 10.U(5.W) // LUI
+  val ALU_AUIPC = 11.U(5.W) // AUIPC
+  val ALU_JAL12 = 12.U(5.W) // JAL
+  val ALU_JALR = 13.U(5.W) // JALR
+  val ALU_NONE = 14.U(5.W) // 不需要ALU运算
+  val BR_BEQ = 15.U(5.W)   // 有符号跳转BEQ
+  val BR_BNE = 16.U(5.W)   // 有符号跳转BNE
+  val BR_BLT = 17.U(5.W)   // 有符号跳转BLT
+  val BR_BGE = 18.U(5.W)   // 有符号跳转BGE
+  val BR_BLTU = 19.U(5.W)  // 无符号跳转BLTU
+  val BR_BGEU = 20.U(5.W)  // 无符号跳转BGEU
+  val ALU_CSR_W = 21.U(5.W) // CSR写入
+  val ALU_MUL    = 22.U(5.W)//补充乘除法单元
+  val ALU_MULH   = 23.U(5.W)
+  val ALU_MULHSU = 24.U(5.W)
+  val ALU_MULHU  = 25.U(5.W)
+  val ALU_DIV    = 26.U(5.W)
+  val ALU_DIVU   = 27.U(5.W)
+  val ALU_REM    = 28.U(5.W)
+  val ALU_REMU   = 29.U(5.W)
 
   val io = IO(new Bundle {
     val inst =      Input(UInt(32.W)) // 输入的指令
@@ -347,12 +350,12 @@ class BaseDecode extends Module {
     ((io.inst_type === B_TYPE) && (funct3 === "b111".U)) -> BR_BGEU, // BGEU
 
     // U型指令
-    ((io.inst_type === U_TYPE) && (opcode === "b0110111".U)) -> ALU_COPY, // LUI
-    ((io.inst_type === U_TYPE) && (opcode === "b0010111".U)) -> ALU_ADD,  // AUIPC
+    ((io.inst_type === U_TYPE) && (opcode === "b0110111".U)) -> ALU_LUI, // LUI
+    ((io.inst_type === U_TYPE) && (opcode === "b0010111".U)) -> ALU_AUIPC,  // AUIPC
 
     // J型指令
-    (io.inst_type === J_TYPE) -> ALU_COPY, // JAL
-    ((io.inst_type === I_TYPE) && (opcode === "b1100111".U)) -> ALU_COPY, // JALR
+    (io.inst_type === J_TYPE) -> ALU_JAL12, // JAL
+    ((io.inst_type === I_TYPE) && (opcode === "b1100111".U)) -> ALU_JAL12, // JALR
 
     // CSR指令
     ((io.inst_type === CSR_TYPE) && (funct3(1,0) === "b01".U)) -> ALU_CSR_W, // CSRRW/CSRRWI
@@ -370,5 +373,3 @@ class BaseDecode extends Module {
   io.ex_rs2_data := io.reg_rs2_data  // 将寄存器读取的数据传给执行阶段
   io.pc_out := io.pc_in  // 将输入的PC值直接传递给输出
 }
-
-
