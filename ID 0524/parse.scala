@@ -4,15 +4,15 @@ import chisel3.util._
 import name._
 import scala.language.reflectiveCalls
 
-// »ù´¡ÒëÂëÄ£¿é
+// åŸºç¡€è¯‘ç æ¨¡å—
 class BaseDecode extends Module {
-    // ¶¨Òå·Ã´æÀàÐÍ³£Á¿
-    val MEM_NONE = 0.U(3.W) //²»·Ã´æ NONE
-    val MEM_BYTE = 1.U(3.W) //×Ö½Ú8 B
-    val MEM_HALF = 2.U(3.W) //×Ö½Ú16 H
-    val MEM_WORD = 3.U(3.W) //×Ö32 W
+    // å®šä¹‰è®¿å­˜ç±»åž‹å¸¸é‡
+    val MEM_NONE = 0.U(3.W) //ä¸è®¿å­˜ NONE
+    val MEM_BYTE = 1.U(3.W) //å­—èŠ‚8 B
+    val MEM_HALF = 2.U(3.W) //å­—èŠ‚16 H
+    val MEM_WORD = 3.U(3.W) //å­—32 W
 
-    //Ö¸ÁîÀàÐÍ³£Á¿¸³Öµ
+    //æŒ‡ä»¤ç±»åž‹å¸¸é‡èµ‹å€¼
     val J_TYPE = 1.U(4.W)
     val R_TYPE = 2.U(4.W)
     val I_TYPE = 3.U(4.W)
@@ -22,38 +22,38 @@ class BaseDecode extends Module {
     val FENCE_TYPE = 7.U(4.W)
     val CSR_TYPE = 8.U(4.W)
 
-    //²Ù×÷ÊýÀ´Ô´
-    // val alu_op1_reg = 0.U(2.W)// ´Ó¼Ä´æÆ÷¶ÁÈ¡
-    // val alu_op2_reg = 1.U(2.W)// ´Ó¼Ä´æÆ÷¶ÁÈ¡
-    // val alu_op1_pc = 2.U(2.W)// ´ÓPC¶ÁÈ¡
-    // val alu_op1_zero = 3.U(2.W)// ¹Ì¶¨Îª0
-    // val alu_op2_imm = 1.U(2.W)// ´ÓÁ¢¼´Êý¶ÁÈ¡
+    //æ“ä½œæ•°æ¥æº
+    // val alu_op1_reg = 0.U(2.W)// ä»Žå¯„å­˜å™¨è¯»å–
+    // val alu_op2_reg = 1.U(2.W)// ä»Žå¯„å­˜å™¨è¯»å–
+    // val alu_op1_pc = 2.U(2.W)// ä»ŽPCè¯»å–
+    // val alu_op1_zero = 3.U(2.W)// å›ºå®šä¸º0
+    // val alu_op2_imm = 1.U(2.W)// ä»Žç«‹å³æ•°è¯»å–
     val alu_op_reg = 0.U(2.W)
     val alu_op_imm = 1.U(2.W)
     val alu_op_pc = 2.U(2.W)
     val alu_op_zero = 3.U(2.W)
 
-    // ALU²Ù×÷ÀàÐÍ³£Á¿
-    val ALU_ADD  = 0.U(5.W)  // ¼Ó·¨£ºADD/ADDI/LOAD/STORE/AUIPC
-    val ALU_SUB  = 1.U(5.W)  // ¼õ·¨£ºSUB/·ÖÖ§±È½Ï
-    val ALU_SLL  = 2.U(5.W)  // Âß¼­×óÒÆ£ºSLL/SLLI
-    val ALU_SLT  = 3.U(5.W)  // ÓÐ·ûºÅÐ¡ÓÚ£ºSLT/SLTI/BLT/BGE
-    val ALU_SLTU = 4.U(5.W)  // ÎÞ·ûºÅÐ¡ÓÚ£ºSLTU/SLTIU/BLTU/BGEU
-    val ALU_XOR  = 5.U(5.W)  // Òì»ò£ºXOR/XORI
-    val ALU_SRL  = 6.U(5.W)  // Âß¼­ÓÒÒÆ£ºSRL/SRLI
-    val ALU_SRA  = 7.U(5.W)  // ËãÊõÓÒÒÆ£ºSRA/SRAI
-    val ALU_OR   = 8.U(5.W)  // »ò£ºOR/ORI
-    val ALU_AND  = 9.U(5.W)  // Óë£ºAND/ANDI
-    val ALU_COPY = 10.U(5.W) // Ö±½Ó´«µÝ²Ù×÷Êý1£ºLUI
-    val ALU_NONE = 11.U(5.W) // ²»ÐèÒªALUÔËËã
-    val BR_BEQ = 12.U(5.W)   // ·ÖÖ§Ìø×ª
-    val BR_BNE = 13.U(5.W)   // ·ÖÖ§Ìø×ª
-    val BR_BLT = 14.U(5.W)   // ·ÖÖ§Ìø×ª
-    val BR_BGE = 15.U(5.W)   // ·ÖÖ§Ìø×ª
-    val BR_BLTU = 16.U(5.W)  // ·ÖÖ§Ìø×ª
-    val BR_BGEU = 17.U(5.W)  // ·ÖÖ§Ìø×ª
-    val ALU_CSR_W = 18.U(5.W) // CSRÐ´Èë
-    val ALU_MUL    = 19.U(5.W) //²¹³ä³Ë³ý·¨µ¥Ôª
+    // ALUæ“ä½œç±»åž‹å¸¸é‡
+    val ALU_ADD  = 0.U(5.W)  // åŠ æ³•ï¼šADD/ADDI/LOAD/STORE/AUIPC
+    val ALU_SUB  = 1.U(5.W)  // å‡æ³•ï¼šSUB/åˆ†æ”¯æ¯”è¾ƒ
+    val ALU_SLL  = 2.U(5.W)  // é€»è¾‘å·¦ç§»ï¼šSLL/SLLI
+    val ALU_SLT  = 3.U(5.W)  // æœ‰ç¬¦å·å°äºŽï¼šSLT/SLTI/BLT/BGE
+    val ALU_SLTU = 4.U(5.W)  // æ— ç¬¦å·å°äºŽï¼šSLTU/SLTIU/BLTU/BGEU
+    val ALU_XOR  = 5.U(5.W)  // å¼‚æˆ–ï¼šXOR/XORI
+    val ALU_SRL  = 6.U(5.W)  // é€»è¾‘å³ç§»ï¼šSRL/SRLI
+    val ALU_SRA  = 7.U(5.W)  // ç®—æœ¯å³ç§»ï¼šSRA/SRAI
+    val ALU_OR   = 8.U(5.W)  // æˆ–ï¼šOR/ORI
+    val ALU_AND  = 9.U(5.W)  // ä¸Žï¼šAND/ANDI
+    val ALU_COPY = 10.U(5.W) // ç›´æŽ¥ä¼ é€’æ“ä½œæ•°1ï¼šLUI
+    val ALU_NONE = 11.U(5.W) // ä¸éœ€è¦ALUè¿ç®—
+    val BR_BEQ = 12.U(5.W)   // åˆ†æ”¯è·³è½¬
+    val BR_BNE = 13.U(5.W)   // åˆ†æ”¯è·³è½¬
+    val BR_BLT = 14.U(5.W)   // åˆ†æ”¯è·³è½¬
+    val BR_BGE = 15.U(5.W)   // åˆ†æ”¯è·³è½¬
+    val BR_BLTU = 16.U(5.W)  // åˆ†æ”¯è·³è½¬
+    val BR_BGEU = 17.U(5.W)  // åˆ†æ”¯è·³è½¬
+    val ALU_CSR_W = 18.U(5.W) // CSRå†™å…¥
+    val ALU_MUL    = 19.U(5.W) //è¡¥å……ä¹˜é™¤æ³•å•å…ƒ
     val ALU_MULH   = 20.U(5.W)
     val ALU_MULHSU = 21.U(5.W)
     val ALU_MULHU  = 22.U(5.W)
@@ -63,33 +63,33 @@ class BaseDecode extends Module {
     val ALU_REMU   = 26.U(5.W)
 
     val io = IO(new Bundle { 
-        val instr =      Input(UInt(32.W)) // ÊäÈëµÄÖ¸Áî
-        val pc = Input(UInt(32.W)) //pcÔÝ¶¨Îª32Î»
-        val inst_type = Output(UInt(4.W)) // Ö¸ÁîÀàÐÍ  //objectÀïÍê³ÉÁË¶¨Òå
-        val rs1 =       Output(UInt(5.W)) // Ô´¼Ä´æÆ÷1 µØÖ·
-        val rs2 =       Output(UInt(5.W)) // Ô´¼Ä´æÆ÷2 µØÖ·
-        val reg_rs1_data =  Intput(UInt(32.W)) // ¼Ä´æÆ÷¸øµÄÔ´¼Ä´æÆ÷1 Êý¾Ý
-        val reg_rs2_data =  Intput(UInt(32.W)) // ¼Ä´æÆ÷¸øµÄÔ´¼Ä´æÆ÷2 Êý¾Ý
-        val ex_rs1_data =  Output(UInt(32.W)) // Ö´ÐÐ½×¶Î¸øµÄÔ´¼Ä´æÆ÷1 Êý¾Ý
-        val ex_rs2_data =  Output(UInt(32.W)) // Ö´ÐÐ½×¶Î¸øµÄÔ´¼Ä´æÆ÷2 Êý¾Ý
-        val rd =        Output(UInt(5.W)) // Ä¿µÄ¼Ä´æÆ÷µØÖ·
-        val imm =       Output(UInt(32.W)) // Á¢¼´Êý
+        val inst =      Input(UInt(32.W)) // è¾“å…¥çš„æŒ‡ä»¤
+        val pc = Input(UInt(32.W)) //pcæš‚å®šä¸º32ä½
+        val inst_type = Output(UInt(4.W)) // æŒ‡ä»¤ç±»åž‹  //objecté‡Œå®Œæˆäº†å®šä¹‰
+        val rs1 =       Output(UInt(5.W)) // æºå¯„å­˜å™¨1 åœ°å€
+        val rs2 =       Output(UInt(5.W)) // æºå¯„å­˜å™¨2 åœ°å€
+        val reg_rs1_data =  Intput(UInt(32.W)) // å¯„å­˜å™¨ç»™çš„æºå¯„å­˜å™¨1 æ•°æ®
+        val reg_rs2_data =  Intput(UInt(32.W)) // å¯„å­˜å™¨ç»™çš„æºå¯„å­˜å™¨2 æ•°æ®
+        val ex_rs1_data =  Output(UInt(32.W)) // æ‰§è¡Œé˜¶æ®µç»™çš„æºå¯„å­˜å™¨1 æ•°æ®
+        val ex_rs2_data =  Output(UInt(32.W)) // æ‰§è¡Œé˜¶æ®µç»™çš„æºå¯„å­˜å™¨2 æ•°æ®
+        val rd =        Output(UInt(5.W)) // ç›®çš„å¯„å­˜å™¨åœ°å€
+        val imm =       Output(UInt(32.W)) // ç«‹å³æ•°
 
-        val alu_op = Output(UInt(5.W))//Ö¸ÁîÃû³Æ Î»¿íÎªÊ²Ã´ÊÇ5 ÎÒÂÒÉèÖÃµÄ ¹»¾ÍºÃÁË¶ÔÂð£¿ÓÐ¿Õ¼äÉÏÏÞÂð£¿
-        val alu_op1 = Output(UInt(2.W)) //Ö´ÐÐ½×¶ÎALUµÄ²Ù×÷Êý1À´Ô´ 
-        val alu_op2 = Output(UInt(2.W)) //Ö´ÐÐ½×¶ÎALUµÄ²Ù×÷Êý2À´Ô´ 
-        val reg_write = Output(Bool()) //ÊÇ·ñÐ´»Ø¼Ä´æÆ÷ 
-        val mem_read = Output(Bool()) //ÊÇ·ñ¶ÁÈ¡ÄÚ´æ LOAD
-        val mem_write = Output(Bool()) //ÊÇ·ñÐ´ÈëÄÚ´æ STORE
+        val alu_op = Output(UInt(5.W))//æŒ‡ä»¤åç§° ä½å®½ä¸ºä»€ä¹ˆæ˜¯5 æˆ‘ä¹±è®¾ç½®çš„ å¤Ÿå°±å¥½äº†å¯¹å—ï¼Ÿæœ‰ç©ºé—´ä¸Šé™å—ï¼Ÿ
+        val alu_op1 = Output(UInt(2.W)) //æ‰§è¡Œé˜¶æ®µALUçš„æ“ä½œæ•°1æ¥æº 
+        val alu_op2 = Output(UInt(2.W)) //æ‰§è¡Œé˜¶æ®µALUçš„æ“ä½œæ•°2æ¥æº 
+        val reg_write = Output(Bool()) //æ˜¯å¦å†™å›žå¯„å­˜å™¨ 
+        val mem_read = Output(Bool()) //æ˜¯å¦è¯»å–å†…å­˜ LOAD
+        val mem_write = Output(Bool()) //æ˜¯å¦å†™å…¥å†…å­˜ STORE
 
-        //Êä³öµÄ·Ã´æ²Ù×÷ÀàÐÍ¿ØÖÆÐÅºÅ£¬ÀýÈç Load, Store, None, ÒÔ¼°ÀàÐÍ L/S - B/H/WÎ»¿íÈ¡¾öÓÚ±àÂë
-        val mem_type = Output(UInt(3.W)) // ·Ã´æÀàÐÍ£¬¶ÔÓ¦ NONE B H W 
-        val mem_unsigned = Output(Bool()) //ÊÇ·ñÎªÎÞ·ûºÅ¼ÓÔØ LBU LHU
-        val exception = Output(Bool()) // Ö¸Áî·Ç·¨±êÖ¾
-        val pc = Output(UInt(32.W)) //Ö±½Ó°ÑPCÊä³öÈ¥
+        //è¾“å‡ºçš„è®¿å­˜æ“ä½œç±»åž‹æŽ§åˆ¶ä¿¡å·ï¼Œä¾‹å¦‚ Load, Store, None, ä»¥åŠç±»åž‹ L/S - B/H/Wä½å®½å–å†³äºŽç¼–ç 
+        val mem_type = Output(UInt(3.W)) // è®¿å­˜ç±»åž‹ï¼Œå¯¹åº” NONE B H W 
+        val mem_unsigned = Output(Bool()) //æ˜¯å¦ä¸ºæ— ç¬¦å·åŠ è½½ LBU LHU
+        val exception = Output(Bool()) // æŒ‡ä»¤éžæ³•æ ‡å¿—
+        val pc = Output(UInt(32.W)) //ç›´æŽ¥æŠŠPCè¾“å‡ºåŽ»
     })
 
-    // ³õÊ¼»¯ËùÓÐÊä³öÐÅºÅµÄÄ¬ÈÏÖµ
+    // åˆå§‹åŒ–æ‰€æœ‰è¾“å‡ºä¿¡å·çš„é»˜è®¤å€¼
     io.inst_type := 0.U
     io.rs1 := 0.U
     io.rs2 := 0.U
@@ -105,18 +105,18 @@ class BaseDecode extends Module {
     io.mem_unsigned := false.B
     io.exception := false.B
 
-    //ÌáÈ¡Ö¸ÁîÀàÐÍÐèÒªµÄÎ»
-    val opcode = io.instr(6, 0)//
-    val funct3 = io.instr(14, 12)//  ?
-    val funct7 = io.instr(31, 25)//  ?
+    //æå–æŒ‡ä»¤ç±»åž‹éœ€è¦çš„ä½
+    val opcode = io.inst(6, 0)//
+    val funct3 = io.inst(14, 12)//  ?
+    val funct7 = io.inst(31, 25)//  ?
 
-//ÌáÈ¡Ô´¼Ä´æÆ÷
-    io.rs1 := io.instr(19, 15)
-    io.rs2 := io.instr(24, 20)
+//æå–æºå¯„å­˜å™¨
+    io.rs1 := io.inst(19, 15)
+    io.rs2 := io.inst(24, 20)
     // io.rd := io.inst(11, 7) 
 
   //---------------------------------------------------------------------------------------------------
-  // inst_type Ö¸ÁîÀàÐÍ
+  // inst_type æŒ‡ä»¤ç±»åž‹
   //---------------------------------------------------------------------------------------------------
     io.inst_type := MuxCase(0.U, Array(
         //J
@@ -138,7 +138,7 @@ class BaseDecode extends Module {
     ))
 
   //---------------------------------------------------------------------------------------------------
-  // mem_type ·Ã´æÀàÐÍ   mem_unsigned ÎÞ·ûºÅ·Ã´æ
+  // mem_type è®¿å­˜ç±»åž‹   mem_unsigned æ— ç¬¦å·è®¿å­˜
   //---------------------------------------------------------------------------------------------------
 
     switch(io.inst_type) {
@@ -150,7 +150,7 @@ class BaseDecode extends Module {
                 (opcode === "b0000011".U && funct3 === "b100".U) -> MEM_BYTE,  // LBU
                 (opcode === "b0000011".U && funct3 === "b101".U) -> MEM_HALF   // LHU
             ))
-            io.mem_unsigned := (opcode === "b0000011".U) && (funct3 === "b100".U || funct3 === "b101".U)  // LBU ºÍ LHU ÊÇÎÞ·ûºÅ¼ÓÔØ
+            io.mem_unsigned := (opcode === "b0000011".U) && (funct3 === "b100".U || funct3 === "b101".U)  // LBU å’Œ LHU æ˜¯æ— ç¬¦å·åŠ è½½
         }
         is(S_TYPE) {
             io.mem_type := MuxCase(MEM_NONE, Array(
@@ -158,33 +158,33 @@ class BaseDecode extends Module {
                 (funct3 === "b001".U) -> MEM_HALF,  // SH
                 (funct3 === "b010".U) -> MEM_WORD   // SW
             ))
-            io.mem_unsigned := false.B  // ´æ´¢Ö¸Áî²»ÐèÒª¿¼ÂÇ·ûºÅ
+            io.mem_unsigned := false.B  // å­˜å‚¨æŒ‡ä»¤ä¸éœ€è¦è€ƒè™‘ç¬¦å·
         }
     }
 
-    //ÌáÈ¡Ô´¼Ä´æÆ÷
-    io.rs1 := io.instr(19, 15)
-    io.rs2 := io.instr(24, 20)
-    // io.rd := io.inst(11, 7) //µ×ÏÂÒÑ¾­Ð´ºÃÁËÄ¿µÄ¼Ä´æÆ÷µØÖ·µÄ·ÖÀà179ÐÐ
+    //æå–æºå¯„å­˜å™¨
+    io.rs1 := io.inst(19, 15)
+    io.rs2 := io.inst(24, 20)
+    // io.rd := io.inst(11, 7) //åº•ä¸‹å·²ç»å†™å¥½äº†ç›®çš„å¯„å­˜å™¨åœ°å€çš„åˆ†ç±»179è¡Œ
 
   //---------------------------------------------------------------------------------------------------
-  // imm Á¢¼´Êý
+  // imm ç«‹å³æ•°
   //---------------------------------------------------------------------------------------------------
     io.imm := MuxCase(0.U, Array(
         (io.inst_type === I_TYPE) -> Cat(Fill(20, io.inst(31)), io.inst(31, 20)),
         (io.inst_type === S_TYPE) -> Cat(Fill(20, io.inst(31)), io.inst(31, 25), io.inst(11, 7)),
         (io.inst_type === B_TYPE) -> Cat(Fill(19, io.inst(31)), io.inst(7), io.inst(30, 25), io.inst(11, 8), 0.U(1.W)),
-        (io.inst_type === U_TYPE) -> Cat(io.inst(31, 12), Fill(12, 0.U(1.W))),//Á¢¼´Êý·ÅÔÚ¸ß12Î»
+        (io.inst_type === U_TYPE) -> Cat(io.inst(31, 12), Fill(12, 0.U(1.W))),//ç«‹å³æ•°æ”¾åœ¨é«˜12ä½
         (io.inst_type === J_TYPE) -> Cat(Fill(11, io.inst(31)), io.inst(31), io.inst(19, 12), io.inst(20), io.inst(30, 21), 0.U(1.W)),
-        //RÐÍÖ¸ÁîÃ»ÓÐÁ¢¼´Êý
+        //Råž‹æŒ‡ä»¤æ²¡æœ‰ç«‹å³æ•°
         (io.inst_type === R_TYPE) -> 0.U(32.W),
-        //CSRÖ¸Áî£¬Á¢¼´ÊýÔÚrs1Î»ÖÃ£¨ÎÒ²»È·¶¨£©
+        //CSRæŒ‡ä»¤ï¼Œç«‹å³æ•°åœ¨rs1ä½ç½®ï¼ˆæˆ‘ä¸ç¡®å®šï¼‰
         (io.inst_type === CSR_TYPE) -> Cat(Fill(27, 0.U(1.W)), io.inst(19, 15)),
-        //FENCEÖ¸ÁîÃ»ÓÐÁ¢¼´Êý
+        //FENCEæŒ‡ä»¤æ²¡æœ‰ç«‹å³æ•°
         (io.inst_type === FENCE_TYPE) -> 0.U(32.W),
     ))
     //-------------------------------------
-    //Ä¿µÄ¼Ä´æÆ÷µØÖ·
+    //ç›®çš„å¯„å­˜å™¨åœ°å€
     //-------------------------------------
     switch(io.inst_type){
         is(I_TYPE){
@@ -200,10 +200,10 @@ class BaseDecode extends Module {
             io.rd := io.inst(11, 7)
         }
         is(S_TYPE){
-            io.rd := 0.U(5.W)  //storeÖ¸ÁîÃ»ÓÐÄ¿µÄ¼Ä´æÆ÷
+            io.rd := 0.U(5.W)  //storeæŒ‡ä»¤æ²¡æœ‰ç›®çš„å¯„å­˜å™¨
         }
         is(B_TYPE){
-            io.rd := 0.U(5.W)  //·ÖÖ§Ìø×ªÖ¸ÁîÃ»ÓÐÄ¿µÄ¼Ä´æÆ÷
+            io.rd := 0.U(5.W)  //åˆ†æ”¯è·³è½¬æŒ‡ä»¤æ²¡æœ‰ç›®çš„å¯„å­˜å™¨
         }
         is(CSR_TYPE){
             io.rd := io.inst(11,7)
@@ -217,78 +217,78 @@ class BaseDecode extends Module {
     }
  
   //------------------------------------------------------------------------------------------------------------------------------------------------------------
-  // alu_op1 ²Ù×÷Êý1À´Ô´  alu_op2 ²Ù×÷Êý2À´Ô´  reg_write ÊÇ·ñÐ´»Ø¼Ä´æÆ÷ mem_read ÊÇ·ñ¶ÁÈ¡ÄÚ´æ mem_write ÊÇ·ñÐ´ÈëÄÚ´æ mem_type ·Ã´æÀàÐÍ mem_unsigned ÎÞ·ûºÅ·Ã´æ
+  // alu_op1 æ“ä½œæ•°1æ¥æº  alu_op2 æ“ä½œæ•°2æ¥æº  reg_write æ˜¯å¦å†™å›žå¯„å­˜å™¨ mem_read æ˜¯å¦è¯»å–å†…å­˜ mem_write æ˜¯å¦å†™å…¥å†…å­˜ mem_type è®¿å­˜ç±»åž‹ mem_unsigned æ— ç¬¦å·è®¿å­˜
   //------------------------------------------------------------------------------------------------------------------------------------------------------------
     switch(io.inst_type) {
         is(I_TYPE){  
-            io.alu_op1 := alu_op_reg    // µÚÒ»¸ö²Ù×÷Êý´Ó¼Ä´æÆ÷¶ÁÈ¡
-            io.alu_op2 := alu_op_imm    // µÚ¶þ¸ö²Ù×÷Êý´ÓÁ¢¼´Êý¶ÁÈ¡
-            io.reg_write := true.B       // Ð´»Ø¼Ä´æÆ÷
-            io.mem_read := (opcode === "b0000011".U)  // Ö»ÓÐLoadÖ¸ÁîÐèÒª¶ÁÈ¡ÄÚ´æ
-            io.mem_write := false.B      // ²»Ð´ÈëÄÚ´æ
-            io.mem_unsigned := (opcode === "b0000011".U) && (funct3 === "b100".U || funct3 === "b101".U)  // LBU ºÍ LHU ÊÇÎÞ·ûºÅ¼ÓÔØ
+            io.alu_op1 := alu_op_reg    // ç¬¬ä¸€ä¸ªæ“ä½œæ•°ä»Žå¯„å­˜å™¨è¯»å–
+            io.alu_op2 := alu_op_imm    // ç¬¬äºŒä¸ªæ“ä½œæ•°ä»Žç«‹å³æ•°è¯»å–
+            io.reg_write := true.B       // å†™å›žå¯„å­˜å™¨
+            io.mem_read := (opcode === "b0000011".U)  // åªæœ‰LoadæŒ‡ä»¤éœ€è¦è¯»å–å†…å­˜
+            io.mem_write := false.B      // ä¸å†™å…¥å†…å­˜
+            io.mem_unsigned := (opcode === "b0000011".U) && (funct3 === "b100".U || funct3 === "b101".U)  // LBU å’Œ LHU æ˜¯æ— ç¬¦å·åŠ è½½
         }
         is(R_TYPE){
-            io.alu_op1 := alu_op_reg        // µÚÒ»¸ö²Ù×÷Êý´Ó¼Ä´æÆ÷¶ÁÈ¡    
-            io.alu_op2 := alu_op_reg        // µÚ¶þ¸ö²Ù×÷Êý´Ó¼Ä´æÆ÷¶ÁÈ¡
-            io.reg_write := true.B           // Ð´»Ø¼Ä´æÆ÷
-            io.mem_read := false.B           // ²»¶ÁÈ¡ÄÚ´æ
-            io.mem_write := false.B          // ²»Ð´ÈëÄÚ´æ
-            io.mem_type := MEM_NONE          // ²»·Ã´æ
-            io.mem_unsigned := false.B       // ·Ç·Ã´æÖ¸Áî£¬ÉèÖÃÎªfalse
+            io.alu_op1 := alu_op_reg        // ç¬¬ä¸€ä¸ªæ“ä½œæ•°ä»Žå¯„å­˜å™¨è¯»å–    
+            io.alu_op2 := alu_op_reg        // ç¬¬äºŒä¸ªæ“ä½œæ•°ä»Žå¯„å­˜å™¨è¯»å–
+            io.reg_write := true.B           // å†™å›žå¯„å­˜å™¨
+            io.mem_read := false.B           // ä¸è¯»å–å†…å­˜
+            io.mem_write := false.B          // ä¸å†™å…¥å†…å­˜
+            io.mem_type := MEM_NONE          // ä¸è®¿å­˜
+            io.mem_unsigned := false.B       // éžè®¿å­˜æŒ‡ä»¤ï¼Œè®¾ç½®ä¸ºfalse
         }
-        is(B_TYPE){                         // ·ÖÖ§Ìø×ª
-            io.alu_op1 := alu_op_reg        // µÚÒ»¸ö²Ù×÷Êý´Ó¼Ä´æÆ÷¶ÁÈ¡
-            io.alu_op2 := alu_op_reg        // µÚ¶þ¸ö²Ù×÷Êý´Ó¼Ä´æÆ÷¶ÁÈ¡
-            io.reg_write := false.B          // ²»Ð´»Ø¼Ä´æÆ÷
-            io.mem_read := false.B           // ²»¶ÁÈ¡ÄÚ´æ
-            io.mem_write := false.B          // ²»Ð´ÈëÄÚ´æ
-            io.mem_type := MEM_NONE          // ²»·Ã´æ
-            io.mem_unsigned := false.B       // ·Ç·Ã´æÖ¸Áî£¬ÉèÖÃÎªfalse
+        is(B_TYPE){                         // åˆ†æ”¯è·³è½¬
+            io.alu_op1 := alu_op_reg        // ç¬¬ä¸€ä¸ªæ“ä½œæ•°ä»Žå¯„å­˜å™¨è¯»å–
+            io.alu_op2 := alu_op_reg        // ç¬¬äºŒä¸ªæ“ä½œæ•°ä»Žå¯„å­˜å™¨è¯»å–
+            io.reg_write := false.B          // ä¸å†™å›žå¯„å­˜å™¨
+            io.mem_read := false.B           // ä¸è¯»å–å†…å­˜
+            io.mem_write := false.B          // ä¸å†™å…¥å†…å­˜
+            io.mem_type := MEM_NONE          // ä¸è®¿å­˜
+            io.mem_unsigned := false.B       // éžè®¿å­˜æŒ‡ä»¤ï¼Œè®¾ç½®ä¸ºfalse
         }
         is(U_TYPE){
-            io.alu_op1 := Mux(opcode === "b0110111".U, alu_op1_zero, alu_op1_pc)   // LUIÓÃzero£¬AUIPCÓÃPC
-            io.alu_op2 := alu_op_imm    // µÚ¶þ¸ö²Ù×÷Êý´ÓÁ¢¼´Êý¶ÁÈ¡
-            io.reg_write := true.B           // ¶¼ÐèÒªÐ´»Ø¼Ä´æÆ÷
-            io.mem_read := false.B           // ²»¶ÁÈ¡ÄÚ´æ
-            io.mem_write := false.B          // ²»Ð´ÈëÄÚ´æ
-            io.mem_type := MEM_NONE          // ²»·Ã´æ
-            io.mem_unsigned := false.B       // ·Ç·Ã´æÖ¸Áî£¬ÉèÖÃÎªfalse
+            io.alu_op1 := Mux(opcode === "b0110111".U, alu_op1_zero, alu_op1_pc)   // LUIç”¨zeroï¼ŒAUIPCç”¨PC
+            io.alu_op2 := alu_op_imm    // ç¬¬äºŒä¸ªæ“ä½œæ•°ä»Žç«‹å³æ•°è¯»å–
+            io.reg_write := true.B           // éƒ½éœ€è¦å†™å›žå¯„å­˜å™¨
+            io.mem_read := false.B           // ä¸è¯»å–å†…å­˜
+            io.mem_write := false.B          // ä¸å†™å…¥å†…å­˜
+            io.mem_type := MEM_NONE          // ä¸è®¿å­˜
+            io.mem_unsigned := false.B       // éžè®¿å­˜æŒ‡ä»¤ï¼Œè®¾ç½®ä¸ºfalse
         }
         is(J_TYPE){                         // JAL
-            io.alu_op1 := alu_op_pc         // µÚÒ»¸ö²Ù×÷Êý´ÓPC¶ÁÈ¡
-            io.alu_op2 := alu_op_imm        // µÚ¶þ¸ö²Ù×÷Êý´ÓÁ¢¼´Êý¶ÁÈ¡
-            io.reg_write := true.B           // Ð´»Ø¼Ä´æÆ÷
-            io.mem_read := false.B           // ²»¶ÁÈ¡ÄÚ´æ
-            io.mem_write := false.B          // ²»Ð´ÈëÄÚ´æ
-            io.mem_type := MEM_NONE          // ²»·Ã´æ
-            io.mem_unsigned := false.B       // ·Ç·Ã´æÖ¸Áî£¬ÉèÖÃÎªfalse
+            io.alu_op1 := alu_op_pc         // ç¬¬ä¸€ä¸ªæ“ä½œæ•°ä»ŽPCè¯»å–
+            io.alu_op2 := alu_op_imm        // ç¬¬äºŒä¸ªæ“ä½œæ•°ä»Žç«‹å³æ•°è¯»å–
+            io.reg_write := true.B           // å†™å›žå¯„å­˜å™¨
+            io.mem_read := false.B           // ä¸è¯»å–å†…å­˜
+            io.mem_write := false.B          // ä¸å†™å…¥å†…å­˜
+            io.mem_type := MEM_NONE          // ä¸è®¿å­˜
+            io.mem_unsigned := false.B       // éžè®¿å­˜æŒ‡ä»¤ï¼Œè®¾ç½®ä¸ºfalse
         }
         is(S_TYPE){
-            io.alu_op1 := alu_op_reg        // µÚÒ»¸ö²Ù×÷Êý´Ó¼Ä´æÆ÷¶ÁÈ¡
-            io.alu_op2 := alu_op_imm        // µÚ¶þ¸ö²Ù×÷Êý´ÓÁ¢¼´Êý¶ÁÈ¡
-            io.reg_write := false.B          // ²»Ð´»Ø¼Ä´æÆ÷
-            io.mem_read := false.B           // ²»¶ÁÈ¡ÄÚ´æ
-            io.mem_write := true.B           // Ð´ÈëÄÚ´æ
-            // io.mem_unsigned := false.B       // ´æ´¢Ö¸Áî²»ÐèÒª¿¼ÂÇ·ûºÅ
+            io.alu_op1 := alu_op_reg        // ç¬¬ä¸€ä¸ªæ“ä½œæ•°ä»Žå¯„å­˜å™¨è¯»å–
+            io.alu_op2 := alu_op_imm        // ç¬¬äºŒä¸ªæ“ä½œæ•°ä»Žç«‹å³æ•°è¯»å–
+            io.reg_write := false.B          // ä¸å†™å›žå¯„å­˜å™¨
+            io.mem_read := false.B           // ä¸è¯»å–å†…å­˜
+            io.mem_write := true.B           // å†™å…¥å†…å­˜
+            // io.mem_unsigned := false.B       // å­˜å‚¨æŒ‡ä»¤ä¸éœ€è¦è€ƒè™‘ç¬¦å·
         }
         is(FENCE_TYPE){
-            io.alu_op1 := alu_op_zero       // FENCEÖ¸Áî²»ÐèÒªALUÔËËã
-            io.alu_op2 := alu_op_imm        // FENCEÖ¸Áî²»ÐèÒªALUÔËËã
-            io.reg_write := false.B          // ²»ÐèÒªÐ´»Ø¼Ä´æÆ÷
-            io.mem_read := false.B           // ²»ÐèÒª¶ÁÄÚ´æ
-            io.mem_write := false.B          // ²»ÐèÒªÐ´ÄÚ´æ
-            io.mem_type := MEM_NONE          // ²»·Ã´æ
-            io.mem_unsigned := false.B       // ·Ç·Ã´æÖ¸Áî£¬ÉèÖÃÎªfalse
-        }     // ²»ÐèÒªÐ´ÄÚ´æ
+            io.alu_op1 := alu_op_zero       // FENCEæŒ‡ä»¤ä¸éœ€è¦ALUè¿ç®—
+            io.alu_op2 := alu_op_imm        // FENCEæŒ‡ä»¤ä¸éœ€è¦ALUè¿ç®—
+            io.reg_write := false.B          // ä¸éœ€è¦å†™å›žå¯„å­˜å™¨
+            io.mem_read := false.B           // ä¸éœ€è¦è¯»å†…å­˜
+            io.mem_write := false.B          // ä¸éœ€è¦å†™å†…å­˜
+            io.mem_type := MEM_NONE          // ä¸è®¿å­˜
+            io.mem_unsigned := false.B       // éžè®¿å­˜æŒ‡ä»¤ï¼Œè®¾ç½®ä¸ºfalse
+        }     // ä¸éœ€è¦å†™å†…å­˜
         is(CSR_TYPE){
-            io.alu_op1 := Mux(funct3(1,0) === "b01".U, alu_op1_reg, alu_op1_zero)  // CSRRW/CSRRWIÓÃreg£¬ÆäËûÓÃzero
+            io.alu_op1 := Mux(funct3(1,0) === "b01".U, alu_op1_reg, alu_op1_zero)  // CSRRW/CSRRWIç”¨regï¼Œå…¶ä»–ç”¨zero
             io.alu_op2 := alu_op2_imm
-            io.reg_write := true.B           // Ð´»Ørd
+            io.reg_write := true.B           // å†™å›žrd
             io.mem_read := false.B
             io.mem_write := false.B
-            io.mem_type := MEM_NONE          // ²»·Ã´æ
-            io.mem_unsigned := false.B       // ·Ç·Ã´æÖ¸Áî£¬ÉèÖÃÎªfalse
+            io.mem_type := MEM_NONE          // ä¸è®¿å­˜
+            io.mem_unsigned := false.B       // éžè®¿å­˜æŒ‡ä»¤ï¼Œè®¾ç½®ä¸ºfalse
         }
         is(0.U) {
             io.rd := 0.U(5.W)
@@ -296,10 +296,10 @@ class BaseDecode extends Module {
     }
 
   //---------------------------------------------------------------------------------------------------
-  // alu_op ²Ù×÷Ãû³Æ
+  // alu_op æ“ä½œåç§°
   //---------------------------------------------------------------------------------------------------
     io.alu_op := MuxCase(ALU_NONE, Array(
-        // RÐÍÖ¸Áî
+        // Råž‹æŒ‡ä»¤
         ((io.inst_type === R_TYPE) && (funct3 === "b000".U) && (funct7 === "b0000000".U)) -> ALU_ADD,  // ADD
         ((io.inst_type === R_TYPE) && (funct3 === "b000".U) && (funct7 === "b0100000".U)) -> ALU_SUB,  // SUB
         ((io.inst_type === R_TYPE) && (funct3 === "b001".U)) && (funct7 === "b0000000".U) -> ALU_SLL,  // SLL
@@ -319,7 +319,7 @@ class BaseDecode extends Module {
         ((io.inst_type === R_TYPE) && (funct7 === "b0000001".U) && (funct3 === "b110".U)) -> ALU_REM //REM
         ((io.inst_type === R_TYPE) && (funct7 === "b0000001".U) && (funct3 === "b111".U)) -> ALU_REMU //REMU
 
-        // IÐÍÖ¸Áî
+        // Iåž‹æŒ‡ä»¤
         ((io.inst_type === I_TYPE) && (opcode === "b0010011".U) && (funct3 === "b000".U)) -> ALU_ADD,  // ADDI
         ((io.inst_type === I_TYPE) && (opcode === "b0010011".U) && (funct3 === "b010".U)) -> ALU_SLT,  // SLTI
         ((io.inst_type === I_TYPE) && (opcode === "b0010011".U) && (funct3 === "b011".U)) -> ALU_SLTU, // SLTIU
@@ -330,13 +330,13 @@ class BaseDecode extends Module {
         ((io.inst_type === I_TYPE) && (opcode === "b0010011".U) && (funct3 === "b101".U) && (funct7 === "b0000000".U)) -> ALU_SRL, // SRLI
         ((io.inst_type === I_TYPE) && (opcode === "b0010011".U) && (funct3 === "b101".U) && (funct7 === "b0100000".U)) -> ALU_SRA, // SRAI
         
-        // LoadÖ¸Áî
-        ((io.inst_type === I_TYPE) && (opcode === "b0000011".U)) -> ALU_ADD, // ËùÓÐLoadÖ¸Áî¶¼ÓÃADD¼ÆËãµØÖ·
+        // LoadæŒ‡ä»¤
+        ((io.inst_type === I_TYPE) && (opcode === "b0000011".U)) -> ALU_ADD, // æ‰€æœ‰LoadæŒ‡ä»¤éƒ½ç”¨ADDè®¡ç®—åœ°å€
         
-        // StoreÖ¸Áî
-        (io.inst_type === S_TYPE) -> ALU_ADD, // ËùÓÐStoreÖ¸Áî¶¼ÓÃADD¼ÆËãµØÖ·
+        // StoreæŒ‡ä»¤
+        (io.inst_type === S_TYPE) -> ALU_ADD, // æ‰€æœ‰StoreæŒ‡ä»¤éƒ½ç”¨ADDè®¡ç®—åœ°å€
         
-        // BranchÖ¸Áî
+        // BranchæŒ‡ä»¤
         ((io.inst_type === B_TYPE) && (funct3 === "b000".U)) -> BR_BEQ,  // BEQ
         ((io.inst_type === B_TYPE) && (funct3 === "b001".U)) -> BR_BNE,  // BNE
         ((io.inst_type === B_TYPE) && (funct3 === "b100".U)) -> BR_BLT,  // BLT
@@ -344,24 +344,25 @@ class BaseDecode extends Module {
         ((io.inst_type === B_TYPE) && (funct3 === "b110".U)) -> BR_BLTU, // BLTU
         ((io.inst_type === B_TYPE) && (funct3 === "b111".U)) -> BR_BGEU, // BGEU
         
-        // UÐÍÖ¸Áî
+        // Uåž‹æŒ‡ä»¤
         ((io.inst_type === U_TYPE) && (opcode === "b0110111".U)) -> ALU_COPY, // LUI
         ((io.inst_type === U_TYPE) && (opcode === "b0010111".U)) -> ALU_ADD,  // AUIPC
         
-        // JÐÍÖ¸Áî
+        // Jåž‹æŒ‡ä»¤
         (io.inst_type === J_TYPE) -> ALU_COPY, // JAL
         ((io.inst_type === I_TYPE) && (opcode === "b1100111".U)) -> ALU_COPY, // JALR
         
-        // CSRÖ¸Áî
+        // CSRæŒ‡ä»¤
         ((io.inst_type === CSR_TYPE) && (funct3(1,0) === "b01".U)) -> ALU_CSR_W, // CSRRW/CSRRWI
         // ((io.inst_type === CSR_TYPE) && (funct3(1,0) === "b10".U)) -> ALU_CSR_S, // CSRRS/CSRRSI
         // ((io.inst_type === CSR_TYPE) && (funct3(1,0) === "b11".U)) -> ALU_CSR_C  // CSRRC/CSRRCI
         // ((io.inst_type === CSR_TYPE) && (funct3(1,0) === "b00".U)) -> ALU_CSR_R, // CSRR_S/CSRR_C
 
-        // FenceÖ¸Áî
+        // FenceæŒ‡ä»¤
 
 
     ))
     io.exception := io.inst_type === 0.U
 }
 }
+
