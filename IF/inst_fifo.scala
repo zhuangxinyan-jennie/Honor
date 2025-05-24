@@ -81,9 +81,7 @@ class InstFifo extends Module {
     write_ptr := write_ptr + 1.U
   }
   
-  //----------------------------------------
   // 读取逻辑
-  //----------------------------------------
   // 组合逻辑输出
   io.read_data1    := lines(read_ptr).data
   io.read_data2    := Mux(count > 1.U, lines(read_ptr +% 1.U).data, 0.U)
