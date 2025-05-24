@@ -79,7 +79,7 @@ class IssueCtrl extends Module {
     ja_conflict := io.D_master_is_ja || io.D_slave_is_ja
 
     // CSR独占周期++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    csr_conflict := io.D_slave_is_csr && io.D_master_is_csr
+    csr_conflict := io.D_slave_is_csr || io.D_master_is_csr
 
     //主指令是访存指令，禁止发射从指令
     master_mem_conflict := io.D_master_memtoReg || io.D_master_mem_write
