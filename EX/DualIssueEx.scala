@@ -55,7 +55,7 @@ object OpNameFromDe{
     val ALU_CSR_W  = 19.U(5.W) // CSR write
     val ALU_CSR_S  = 20.U(5.W) // CSR set
     val ALU_CSR_C  = 21.U(5.W) // CSR clr
-    val ALU_MUL    = 22.U(5.W)
+     val ALU_MUL   = 22.U(5.W)
     val ALU_MULH   = 23.U(5.W)
     val ALU_MULHSU = 24.U(5.W)
     val ALU_MULHU  = 25.U(5.W)
@@ -70,6 +70,8 @@ class DeToExIO extends Bundle{
   val inst_type = Output(UInt(4.W))
   val rs1 = Output(UInt(5.W))
   val rs2 = Output(UInt(5.W))
+  val rs1Val = Output(UInt(32.W))
+  val rs2Val = Output(UInt(32.W))
   val rd = Output(UInt(5.W))
   val imm = Output(UInt(32.W))
   val alu_op = Output(UInt(5.W))
@@ -81,13 +83,14 @@ class DeToExIO extends Bundle{
   val mem_type = Output(UInt(3.W))
   val mem_unsigned = Output(Bool())
   val exception = Output(Bool())
+  
 }
 
 class ExToExceptionIO extends Bundle {
   val valid     = Output(Bool())        // exception valid
   val cause     = Output(UInt(4.W))     // exception cause
   val pc        = Output(UInt(32.W))    // exception PC
-  //val inst      = Output(UInt(32.W))    // exception Inst
+  // val inst      = Output(UInt(32.W))    // exception Inst
   val memAddr   = Output(UInt(32.W))    // mem address (for load/store exceptions)
 }
 
@@ -110,6 +113,7 @@ class MemAccessIO extends Bundle {      // ex to mem access
   val reqData   = Output(UInt(32.W))
   val reqWidth  = Output(UInt(2.W))     // 0=1B, 1=2B, 2=4B
   val reqWrite  = Output(Bool())        // 0 for read, 1 for write
+  val memUnsigned = Output(Bool())
   val rspValid  = Input(Bool())
   val rspData   = Input(UInt(32.W))     // data for load
 }
@@ -117,11 +121,13 @@ class MemAccessIO extends Bundle {      // ex to mem access
 class DualIssueExIO extends Bundle {
   // Dual instruction inputs
   val ExIn1 = Flipped(new DeToExIO)
-  val EXIn2 = Flipped(new DeToExIO)
+  val ExIn2 = Flipped(new DeToExIO)
   val pc1       = Input(UInt(32.W))
   val pc2       = Input(UInt(32.W))
 
   // Outputs
+  val pc1Out    = Output(UInt(32.W))
+  val pc2Out    = Output(UInt(32.W))
   val rd1       = Output(UInt(5.W))// direct connect
   val rd2       = Output(UInt(5.W))
   val result1   = Output(UInt(32.W))
@@ -156,6 +162,8 @@ class DualIssueEx extends Module {
   val io = IO(new DualIssueExIO)
 
   // Default outputs
+  io.pc1Out :=0.U
+  io.pc2Out :=0.U
   io.rd1 := 0.U
   io.rd2 := 0.U
   io.result1 := 0.U
@@ -171,13 +179,13 @@ class DualIssueEx extends Module {
   io.exception1.valid := false.B
   io.exception1.cause := 0.U
   io.exception1.pc := 0.U
-  //io.exception1.inst := 0.U
+  // io.exception1.inst := 0.U
   io.exception1.memAddr := 0.U
   
   io.exception2.valid := false.B
   io.exception2.cause := 0.U
   io.exception2.pc := 0.U
-  //io.exception2.inst := 0.U
+  // io.exception2.inst := 0.U
   io.exception2.memAddr := 0.U
 
   // CSR defaults
@@ -192,12 +200,14 @@ class DualIssueEx extends Module {
   io.mem1.reqData := 0.U
   io.mem1.reqWidth := 0.U
   io.mem1.reqWrite := false.B
+  io.mem1.memUnsigned := false.B
   
   io.mem2.reqValid := false.B
   io.mem2.reqAddr := 0.U
   io.mem2.reqData := 0.U
   io.mem2.reqWidth := 0.U
   io.mem2.reqWrite := false.B
+  io.mem2.memUnsigned := false.B
 
   // BP
   io.bpVerify := false.B
@@ -273,30 +283,34 @@ class DualIssueEx extends Module {
   
 
   // Branch condition evaluation
-  def branchEval(op: UInt, rs1: UInt, rs2: UInt): Bool = {
+  def branchEval(op: UInt, rs1Val: UInt, rs2Val: UInt): Bool = {
     val taken = WireDefault(false.B)
     
     switch(op) {
-      is(OpNameFromDe.BR_BEQ)  { taken := rs1 === rs2 }
-      is(OpNameFromDe.BR_BNE)  { taken := rs1 =/= rs2 }
-      is(OpNameFromDe.BR_BLT)  { taken := rs1.asSInt < rs2.asSInt }
-      is(OpNameFromDe.BR_BGE)  { taken := rs1.asSInt >= rs2.asSInt }
-      is(OpNameFromDe.BR_BLTU) { taken := rs1 < rs2 }
-      is(OpNameFromDe.BR_BGEU) { taken := rs1 >= rs2 }
+      is(OpNameFromDe.BR_BEQ)  { taken := rs1Val === rs2Val }
+      is(OpNameFromDe.BR_BNE)  { taken := rs1Val =/= rs2Val }
+      is(OpNameFromDe.BR_BLT)  { taken := rs1Val.asSInt < rs2Val.asSInt }
+      is(OpNameFromDe.BR_BGE)  { taken := rs1Val.asSInt >= rs2Val.asSInt }
+      is(OpNameFromDe.BR_BLTU) { taken := rs1Val < rs2Val }
+      is(OpNameFromDe.BR_BGEU) { taken := rs1Val >= rs2Val }
     }
     taken
   }
 
+  // Output register destinations
+  io.rd1 := io.ExIn1.rd
+  io.rd2 := io.ExIn2.rd
+
   // Inst 1
   val op1_1 = MuxLookup(io.ExIn1.alu_op1, 0.U, Seq(
-    OpSourceFromDe.alu_op_reg -> io.ExIn1.rs1,
+    OpSourceFromDe.alu_op_reg -> io.ExIn1.rs1Val,
     OpSourceFromDe.alu_op_imm -> io.ExIn1.imm,
     OpSourceFromDe.alu_op_pc -> io.pc1,
     OpSourceFromDe.alu_op_zero -> 0.U
   ))
   
   val op2_1 = MuxLookup(io.ExIn1.alu_op2, 0.U, Seq(
-    OpSourceFromDe.alu_op_reg -> io.ExIn1.rs2,
+    OpSourceFromDe.alu_op_reg -> io.ExIn1.rs2Val,
     OpSourceFromDe.alu_op_imm -> io.ExIn1.imm,
     OpSourceFromDe.alu_op_pc -> io.pc1,
     OpSourceFromDe.alu_op_zero -> 0.U
@@ -308,25 +322,44 @@ class DualIssueEx extends Module {
     io.exception1.valid := true.B
     io.exception1.cause := ExceptionCause.DIVIDE_BY_ZERO
     io.exception1.pc := io.pc1
-    //io.exception1.inst := io.ExIn1.inst
+    // io.exception1.inst := io.ExIn1.inst
   }
   
   // branches/jumps for instruction 1
   when(io.ExIn1.inst_type === InstTypeFromDe.B_TYPE) {
     io.branch1 := branchEval(io.ExIn1.alu_op, op1_1, op2_1)
-    io.branchTarget1 := io.pc1 + io.ExIn1.imm
+    io.branchTarget1 := aluResult1 // should be io.pc1 + io.ExIn1.imm
   }.elsewhen(io.ExIn1.inst_type === InstTypeFromDe.J_TYPE) {
     io.branch1 := true.B
     io.branchTarget1 := aluResult1
   }
 
+  
+
   // memory operations for instruction 1
   when(io.ExIn1.mem_read || io.ExIn1.mem_write) {
     io.mem1.reqValid := true.B
-    io.mem1.reqAddr := aluResult1
-    io.mem1.reqData := op2_1
+    io.mem1.reqAddr := Mux(io.ExIn1.mem_write, aluResult1, io.ExIn1.rd)
+    io.mem1.reqData := Mux(io.ExIn1.mem_read, 
+                        Mux(io.ExIn1.mem_unsigned, 
+                          Mux(io.ExIn1.mem_type(0),
+                            aluResult1(7,0),
+                            aluResult1(15,0)),
+                          Mux(io.ExIn1.mem_type(1),
+                            Mux(io.ExIn1.mem_type(0),
+                                aluResult1,
+                                Cat(Fill(16,aluResult1(15)),aluResult1(15,0))),
+                            Cat(Fill(24,aluResult1(7)),aluResult1(7,0)))),
+                        Mux(io.ExIn1.mem_write,
+                          Mux(io.ExIn1.mem_type(1),
+                            Mux(io.ExIn1.mem_type(0),
+                              op2_1,
+                              op2_1(15,0)),
+                            op2_1(7,0)),
+                          aluResult1 ))
     io.mem1.reqWidth := io.ExIn1.mem_type
     io.mem1.reqWrite := io.ExIn1.mem_write
+    io.mem1.memUnsigned := io.ExIn1.mem_unsigned
     
     // Check for misaligned accesses
     when(io.ExIn1.mem_type === 1.U && aluResult1(0) =/= 0.U ||  // Half-word misaligned
@@ -334,7 +367,7 @@ class DualIssueEx extends Module {
       io.exception1.valid := true.B
       io.exception1.cause := Mux(io.ExIn1.mem_write, ExceptionCause.STORE_MISALIGN, ExceptionCause.LOAD_MISALIGN)
       io.exception1.pc := io.pc1
-      //io.exception1.inst := io.ExIn1.inst
+      // io.exception2.inst := io.EXIn2.inst
       io.exception1.memAddr := aluResult1
     }
   }
@@ -354,74 +387,7 @@ class DualIssueEx extends Module {
     }
   }
 
-  // Inst 2
-  val op1_2 = MuxLookup(io.EXIn2.alu_op1, 0.U, Seq(
-    OpSourceFromDe.alu_op_reg -> io.EXIn2.rs1,
-    OpSourceFromDe.alu_op_imm -> io.EXIn2.imm,
-    OpSourceFromDe.alu_op_pc -> io.pc2,
-    OpSourceFromDe.alu_op_zero -> 0.U
-  ))
-  
-  val op2_2 = MuxLookup(io.EXIn2.alu_op2, 0.U, Seq(
-    OpSourceFromDe.alu_op_reg -> io.EXIn2.rs2,
-    OpSourceFromDe.alu_op_imm -> io.EXIn2.imm,
-    OpSourceFromDe.alu_op_pc -> io.pc2,
-    OpSourceFromDe.alu_op_zero -> 0.U
-  ))
-
-  val (aluResult2, aluException2) = alu(io.EXIn2.alu_op, op1_2, op2_2)
-
-   when(aluException2) {
-    io.exception2.valid := true.B
-    io.exception2.cause := ExceptionCause.DIVIDE_BY_ZERO
-    io.exception2.pc := io.pc2
-    //io.exception2.inst := io.EXIn2.inst
-  }
-  
-  // branches/jumps for instruction 2
-  when(io.EXIn2.inst_type === InstTypeFromDe.B_TYPE) {
-    io.branch2 := branchEval(io.EXIn2.alu_op, op1_2, op2_2)
-    io.branchTarget2 := io.pc2 + io.EXIn2.imm
-  }.elsewhen(io.EXIn2.inst_type === InstTypeFromDe.J_TYPE) {
-    io.branch2 := true.B
-    io.branchTarget2 := aluResult2
-  }
-
-  // memory operations for instruction 2
-  when(io.EXIn2.mem_read || io.EXIn2.mem_write) {
-    io.mem2.reqValid := true.B
-    io.mem2.reqAddr := aluResult2
-    io.mem2.reqData := op2_2
-    io.mem2.reqWidth := io.EXIn2.mem_type
-    io.mem2.reqWrite := io.EXIn2.mem_write
-    
-    // Check for misaligned accesses
-    when(io.EXIn2.mem_type === 1.U && aluResult2(0) =/= 0.U ||  // Half-word misaligned
-        io.EXIn2.mem_type === 2.U && aluResult2(1,0) =/= 0.U) { // Word misaligned
-      io.exception2.valid := true.B
-      io.exception2.cause := Mux(io.EXIn2.mem_write, ExceptionCause.STORE_MISALIGN, ExceptionCause.LOAD_MISALIGN)
-      io.exception2.pc := io.pc2
-      //io.exception2.inst := io.EXIn2.inst
-      io.exception2.memAddr := aluResult2
-    }
-  }
-
-  // CSR operations for instruction 2
-  when(io.EXIn2.inst_type === InstTypeFromDe.CSR_TYPE) {
-    io.csr.readAddr := io.EXIn2.imm(11,0)
-    io.csr.writeEn := true.B
-    io.csr.writeAddr := io.EXIn2.imm(11,0)
-    
-    when(io.EXIn2.alu_op === OpNameFromDe.ALU_CSR_W) {
-      io.csr.writeData := op1_2
-    }.elsewhen(io.EXIn2.alu_op === OpNameFromDe.ALU_CSR_S) {
-      io.csr.writeData := io.csr.readData | op1_2
-    }.elsewhen(io.EXIn2.alu_op === OpNameFromDe.ALU_CSR_C) {
-      io.csr.writeData := io.csr.readData & ~op1_2
-    }
-  }
-
-  // memory responses
+  // memory responses: load
   when(io.mem1.rspValid) {
     io.result1 := io.mem1.rspData
     io.valid1 := true.B
@@ -430,17 +396,99 @@ class DualIssueEx extends Module {
     io.valid1 := io.ExIn1.reg_write && !io.ExIn1.exception
   }
 
+
+  // Inst 2
+  val op1_2 = MuxLookup(io.ExIn2.alu_op1, 0.U, Seq(
+    OpSourceFromDe.alu_op_reg -> io.ExIn2.rs1,
+    OpSourceFromDe.alu_op_imm -> io.ExIn2.imm,
+    OpSourceFromDe.alu_op_pc -> io.pc2,
+    OpSourceFromDe.alu_op_zero -> 0.U
+  ))
+  
+  val op2_2 = MuxLookup(io.ExIn2.alu_op2, 0.U, Seq(
+    OpSourceFromDe.alu_op_reg -> io.ExIn2.rs2,
+    OpSourceFromDe.alu_op_imm -> io.ExIn2.imm,
+    OpSourceFromDe.alu_op_pc -> io.pc2,
+    OpSourceFromDe.alu_op_zero -> 0.U
+  ))
+
+  val (aluResult2, aluException2) = alu(io.ExIn2.alu_op, op1_2, op2_2)
+
+   when(aluException2) {
+    io.exception2.valid := true.B
+    io.exception2.cause := ExceptionCause.DIVIDE_BY_ZERO
+    io.exception2.pc := io.pc2
+    // io.exception2.inst := io.EXIn2.inst
+  }
+  
+  // branches/jumps for instruction 2
+  when(io.ExIn2.inst_type === InstTypeFromDe.B_TYPE) {
+    io.branch2 := branchEval(io.ExIn2.alu_op, op1_2, op2_2)
+    io.branchTarget2 := aluResult2 // should be io.pc2 + io.EXIn2.imm
+  }.elsewhen(io.ExIn2.inst_type === InstTypeFromDe.J_TYPE) {
+    io.branch2 := true.B
+    io.branchTarget2 := aluResult2
+  }
+
+  // memory operations for instruction 2
+  when(io.ExIn2.mem_read || io.ExIn2.mem_write) {
+    io.mem2.reqValid := true.B
+    io.mem2.reqAddr := Mux(io.ExIn2.mem_write, aluResult2, io.ExIn2.rd)
+    io.mem2.reqData := Mux(io.ExIn2.mem_read, 
+                        Mux(io.ExIn2.mem_unsigned, 
+                          Mux(io.ExIn2.mem_type(0),
+                            aluResult2(7,0),
+                            aluResult2(15,0)),
+                          Mux(io.ExIn2.mem_type(1),
+                            Mux(io.ExIn2.mem_type(0),
+                                aluResult2,
+                                Cat(Fill(16,aluResult2(15)),aluResult2(15,0))),
+                            Cat(Fill(24,aluResult2(7)),aluResult2(7,0)))),
+                        Mux(io.ExIn2.mem_write,
+                          Mux(io.ExIn2.mem_type(1),
+                            Mux(io.ExIn2.mem_type(0),
+                              op2_2,
+                              op2_2(15,0)),
+                            op2_2(7,0)),
+                          aluResult2 ))
+    io.mem2.reqWidth := io.ExIn2.mem_type
+    io.mem2.reqWrite := io.ExIn2.mem_write
+    io.mem2.memUnsigned := io.ExIn2.mem_unsigned
+    
+    // Check for misaligned accesses
+    when(io.ExIn2.mem_type === 1.U && aluResult2(0) =/= 0.U ||  // Half-word misaligned
+        io.ExIn2.mem_type === 2.U && aluResult2(1,0) =/= 0.U) { // Word misaligned
+      io.exception2.valid := true.B
+      io.exception2.cause := Mux(io.ExIn2.mem_write, ExceptionCause.STORE_MISALIGN, ExceptionCause.LOAD_MISALIGN)
+      io.exception2.pc := io.pc2
+      // io.exception2.inst := io.EXIn2.inst
+      io.exception2.memAddr := aluResult2
+    }
+  }
+
+  // CSR operations for instruction 2
+  when(io.ExIn2.inst_type === InstTypeFromDe.CSR_TYPE) {
+    io.csr.readAddr := io.ExIn2.imm(11,0)
+    io.csr.writeEn := true.B
+    io.csr.writeAddr := io.ExIn2.imm(11,0)
+    
+    when(io.ExIn2.alu_op === OpNameFromDe.ALU_CSR_W) {
+      io.csr.writeData := op1_2
+    }.elsewhen(io.ExIn2.alu_op === OpNameFromDe.ALU_CSR_S) {
+      io.csr.writeData := io.csr.readData | op1_2
+    }.elsewhen(io.ExIn2.alu_op === OpNameFromDe.ALU_CSR_C) {
+      io.csr.writeData := io.csr.readData & ~op1_2
+    }
+  }
+
   when(io.mem2.rspValid) {
     io.result2 := io.mem2.rspData
     io.valid2 := true.B
   }.otherwise {
     io.result2 := aluResult2
-    io.valid2 := io.EXIn2.reg_write && !io.EXIn2.exception
+    io.valid2 := io.ExIn2.reg_write && !io.ExIn2.exception
   }
 
-  // Output register destinations
-  io.rd1 := io.ExIn1.rd
-  io.rd2 := io.EXIn2.rd
 
   // exceptions
   when(io.exceptionFeedback.flush) {
@@ -458,8 +506,7 @@ class DualIssueEx extends Module {
   val bpFifo = Module(new Queue(UInt(32.W), entries = 4))
   bpFifo.io.enq.valid := io.bpPredict.valid
   bpFifo.io.enq.bits := io.bpPredict.bits
-  bpFifo.io.deq.ready := false.B 
-
+  bpFifo.io.deq.ready := false.B
   val verifyTarget = WireDefault(false.B)
   
   // varify inst 1
@@ -476,11 +523,11 @@ class DualIssueEx extends Module {
   }
 
   // varify of inst 2
-  val verify2 = io.EXIn2.inst_type === InstTypeFromDe.B_TYPE || 
-               io.EXIn2.inst_type === InstTypeFromDe.J_TYPE
+  val verify2 = io.ExIn2.inst_type === InstTypeFromDe.B_TYPE || 
+               io.ExIn2.inst_type === InstTypeFromDe.J_TYPE
   when(verify2 && bpFifo.io.deq.valid) {
     val predTarget = bpFifo.io.deq.bits
-    val realTarget = Mux(io.EXIn2.inst_type === InstTypeFromDe.B_TYPE, 
+    val realTarget = Mux(io.ExIn2.inst_type === InstTypeFromDe.B_TYPE, 
                         io.branchTarget2,
                         aluResult2)
     verifyTarget := predTarget === realTarget
