@@ -90,24 +90,26 @@ object ALU {
   val ALU_SRA  = 7.U(5.W)  // 算术右移SRA/SRAI
   val ALU_OR   = 8.U(5.W)  // 或OR/ORI
   val ALU_AND  = 9.U(5.W)  // 与AND/ANDI
-  val ALU_COPY = 10.U(5.W) // 直接传输数据1 LUI
-  val ALU_NONE = 11.U(5.W) // 不需要ALU运算
-  val BR_BEQ = 12.U(5.W)   // 有符号跳转BEQ
-  val BR_BNE = 13.U(5.W)   // 有符号跳转BNE
-  val BR_BLT = 14.U(5.W)   // 有符号跳转BLT
-  val BR_BGE = 15.U(5.W)   // 有符号跳转BGE
-  val BR_BLTU = 16.U(5.W)  // 无符号跳转BLTU
-  val BR_BGEU = 17.U(5.W)  // 无符号跳转BGEU
-  val ALU_CSR_W = 18.U(5.W) // CSR写入
-  val ALU_MUL    = 19.U(5.W)//补充乘除法单元
-  val ALU_MULH   = 20.U(5.W)
-  val ALU_MULHSU = 21.U(5.W)
-  val ALU_MULHU  = 22.U(5.W)
-  val ALU_DIV    = 23.U(5.W)
-  val ALU_DIVU   = 24.U(5.W)
-  val ALU_REM    = 25.U(5.W)
-  val ALU_REMU   = 26.U(5.W)
-
+  val ALU_LUI = 10.U(5.W) // LUI
+  val ALU_AUIPC = 11.U(5.W) // AUIPC
+  val ALU_JAL12 = 12.U(5.W) // JAL
+  val ALU_JALR = 13.U(5.W) // JALR
+  val ALU_NONE = 14.U(5.W) // 不需要ALU运算
+  val BR_BEQ = 15.U(5.W)   // 有符号跳转BEQ
+  val BR_BNE = 16.U(5.W)   // 有符号跳转BNE
+  val BR_BLT = 17.U(5.W)   // 有符号跳转BLT
+  val BR_BGE = 18.U(5.W)   // 有符号跳转BGE
+  val BR_BLTU = 19.U(5.W)  // 无符号跳转BLTU
+  val BR_BGEU = 20.U(5.W)  // 无符号跳转BGEU
+  val ALU_CSR_W = 21.U(5.W) // CSR写入
+  val ALU_MUL    = 22.U(5.W)//补充乘除法单元
+  val ALU_MULH   = 23.U(5.W)
+  val ALU_MULHSU = 24.U(5.W)
+  val ALU_MULHU  = 25.U(5.W)
+  val ALU_DIV    = 26.U(5.W)
+  val ALU_DIVU   = 27.U(5.W)
+  val ALU_REM    = 28.U(5.W)
+  val ALU_REMU   = 29.U(5.W)
 }
 
 object MemType {
