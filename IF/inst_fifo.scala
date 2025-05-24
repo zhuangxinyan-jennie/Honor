@@ -12,7 +12,7 @@ class InstFifoIO extends Bundle {
   // 时钟和复位
   val clk       = Input(Clock())
   val rst       = Input(Bool())      // 系统复位
-  val fifo_rst  = Input(Bool())      // FIFO专用复位
+  val fifo_rst  = Input(AsyncReset())      // FIFO专用复位（异步复位)
   val i_stall   = Input(Bool())      // 流水线暂停信号
   
   // 读取端口
@@ -39,9 +39,20 @@ class InstFifoIO extends Bundle {
 
 class InstFifo extends Module {
   val io = IO(new InstFifoIO)
+
   
-  // FIFO存储（16条目）
-  val lines = Reg(Vec(16, new FifoEntry))
+  // 异步复位：所有需要立即清空的寄存器
+  withReset(io.fifo_rst) {  /
+    val write_pointer = RegInit(0.U(4.W))  
+    val read_pointer  = RegInit(0.U(4.W))  
+    val data_count    = RegInit(0.U(4.W))  
+  }
+  
+  // 同步复位（普通逻辑）
+  withReset(io.rst) {
+    val lines = Reg(Vec(16, new FifoEntry)) // 存储条目（可同步复位）
+  } 
+  
   
   // 指针和计数器
   val write_ptr = RegInit(0.U(4.W))
@@ -88,9 +99,7 @@ class InstFifo extends Module {
     read_ptr := read_ptr + 1.U
   }
   
-  //----------------------------------------
   // 计数器与状态
-  //----------------------------------------
   // 计数逻辑优化版
   when(io.fifo_rst) {
     count := 0.U
@@ -107,9 +116,7 @@ class InstFifo extends Module {
   io.empty        := (count === 0.U)
   io.almost_empty := (count === 1.U)
   
-  //----------------------------------------
-  // 可选：移除的性能计数器
-  //----------------------------------------
-  // val master_cnt = RegInit(0.U(64.W))  // 可移除
-  // val slave_cnt  = RegInit(0.U(64.W))  // 可移除
+  // 移除的性能计数器？
+  // val master_cnt = RegInit(0.U(64.W)) 
+  // val slave_cnt  = RegInit(0.U(64.W))  
 }
