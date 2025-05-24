@@ -9,11 +9,10 @@ class MEM extends Module {
 
     val cpu = new Bundle {
       val mem_en     = Input(Bool()) //mem阶段接收使能信号
-      val mem_read   = Input(Bool())//mem阶段是否进行读操作
       val mem_write  = Input(Bool())//mem阶段是否进行写操作
-      val mem_type   = Input(UInt(3.W))//指示mem阶段的访存类型，NONE B H W
+      val mem_type   = Input(UInt(2.W))//指示mem阶段的访存类型，NONE B H W
       val mem_unsigned = Input(Bool())//指示mem阶段是否进行无符号访存
-      val mem_wdata  = Input(UInt(32.W)) //EX阶段计算出的load/save数据
+      val mem_wdata  = Input(UInt(32.W)) //EX阶段计算出的数据
       val mem_addr   = Input(UInt(32.W)) //EX阶段计算出的地址
       val mem_rdata  = Output(UInt(32.W)) //MEM阶段读取得到的数据
       val mem_ready  = Output(Bool()) //标志mem阶段工作是否完成，用于不定周期访存控制
@@ -81,11 +80,11 @@ class MEM extends Module {
   io.sram.addr  := memAccess.io.data_sram_addr
   io.sram.wdata := memAccess.io.data_sram_wdata
   io.sram.funct3:= MuxCase(0.U, Array(
-    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
-    (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
-    (io.cpu.mem_type === 3.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
-    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
-    (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
+    (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
+    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
+    (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
+    (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
+    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
   ))
 
   io.mem_bypass_valid := false.B
@@ -108,15 +107,15 @@ class MEM extends Module {
         when(io.cpu.mem_en) {
           addrReg := io.cpu.mem_addr
           opReg   := MuxCase(0.U, Array(
-            (io.cpu.mem_read === true.B && io.cpu.mem_write === false.B) -> "b0000011".U,
-            (io.cpu.mem_write === true.B && io.cpu.mem_read === false.B) -> "b0100011".U
+            (io.cpu.mem_write === false.B) -> "b0000011".U,
+            (io.cpu.mem_write === true.B) -> "b0100011".U
           ))
           funct3Reg := MuxCase(0.U, Array(
-            (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
-            (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
-            (io.cpu.mem_type === 3.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
-            (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
-            (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
+            (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
+            (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
+            (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
+            (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
+            (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
           ))
           wdataReg := io.cpu.mem_wdata
           state := sCheckCache

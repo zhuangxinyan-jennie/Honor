@@ -2,10 +2,9 @@
 
 | 端口名称         | 方向 | 位宽       | 功能描述                                                   |
 | ---------------- | ---- | ---------- | -----------------------------------------------------    |
-| cpu.mem_en           | I    | 1          | M 阶段是否有访存操作                                  |
-| cpu.mem_read         | I    | 1          | M 阶段执行load操作,从EX阶段获得                        | 
-| cpu.mem_write        | I    | 1          | M 阶段执行store操作，从EX阶段获得                      |
-| cpu.mem_type         | I    | 3          | M 阶段进行的访存操作指示 H B W NONE，从EX阶段获得         |
+| cpu.mem_en           | I    | 1          | M 阶段是否有访存操作                                   | 
+| cpu.mem_write        | I    | 1          | 置高表示 M 阶段执行store操作，置零表示load操作           |
+| cpu.mem_type         | I    | 2          | M 阶段进行的访存操作指示 H B W NONE，从EX阶段获得，对应reqWidth信号 |
 | cpu.mem_unsigned     | I    | 1          | M 阶段是否进行有符号存取，从EX阶段获得                     |
 | cpu.mem_wdata        | I    | 32         | M 阶段需要写入 Cache 的数据，从EX阶段获得              |
 | cpu.mem_addr         | I    | 32         | M 阶段访存的物理地址，从EX阶段获得                    |
