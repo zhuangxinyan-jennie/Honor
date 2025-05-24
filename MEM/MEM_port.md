@@ -3,12 +3,12 @@
 | 端口名称         | 方向 | 位宽       | 功能描述                                                   |
 | ---------------- | ---- | ---------- | -----------------------------------------------------    |
 | cpu.mem_en           | I    | 1          | M 阶段是否有访存操作                                  |
-| cpu.mem_read         | I    | 1          | M 阶段执行load操作,从解码阶段提前获得                  | 
-| cpu.mem_write        | I    | 1          | M 阶段执行store操作，从解码阶段提前获得                 |
-| cpu.mem_type         | I    | 3          | M 阶段进行的访存操作指示 H B W NONE，从解码阶段提前获得  |
-| cpu.mem_unsigned     | I    | 1          | M 阶段是否进行有符号存取，从解码阶段提前获得             |
-| cpu.mem_wdata        | I    | 32         | M 阶段需要写入 Cache 的数据，从执行阶段获得             |
-| cpu.mem_addr         | I    | 32         | M 阶段访存的物理地址，从执行阶段获得                    |
+| cpu.mem_read         | I    | 1          | M 阶段执行load操作,从EX阶段获得                        | 
+| cpu.mem_write        | I    | 1          | M 阶段执行store操作，从EX阶段获得                      |
+| cpu.mem_type         | I    | 3          | M 阶段进行的访存操作指示 H B W NONE，从EX阶段获得         |
+| cpu.mem_unsigned     | I    | 1          | M 阶段是否进行有符号存取，从EX阶段获得                     |
+| cpu.mem_wdata        | I    | 32         | M 阶段需要写入 Cache 的数据，从EX阶段获得              |
+| cpu.mem_addr         | I    | 32         | M 阶段访存的物理地址，从EX阶段获得                    |
 | cpu.mem_ready        | O    | 1          | M阶段工作是否完成，用于不定周期访存控制                 |
 | cpu.mem_rdata        | O    | 32         | 处理后的内存读取结果 (根据 Load 类型选择字节/半字/字)   |
 | sram.rdata           | I    | 32         | 从助教提供模块接口实际读回的数据                       |
