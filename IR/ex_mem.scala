@@ -1,19 +1,13 @@
 import chisel3._
 import chisel3.util._
 
-class ctrl_sign extends Bundle {
-  val aluop = UInt(8.W)         // ALU操作码，指示ALU执行的具体操作
-  val read_rs = Bool()          // 读取源寄存器rs
-  val read_rt = Bool()          // 读取源寄存器rt
-  val reg_write = Bool()        // 寄存器写使能
+class ex_mem_ctrl_sign extends Bundle {
   val mem_en = Bool()           // 内存使能
-  val mem_write_reg = Bool()    // 内存写回寄存器
-  val mem_read = Bool()         // 内存读使能
-  val mem_write = Bool()        // 内存写使能
-  val may_bring_flush = Bool()  // 可能引发刷新
-  val only_one_issue = Bool()   // 仅允许一个指令发射
-  val icache_fence = Bool()     // 指令缓存隔离
-  val dcache_fence = Bool()     // 数据缓存隔离
+  val mem_write = Bool()        // 内存写回寄存器
+  val mem_type = UInt(2.W)        // 内存写使能
+  val mem_unsigned = Bool()        // 内存无符号访存使能
+  val mem_wdata = UInt(32.W)      // 内存写数据
+  val mem_addr = UInt(32.W)       // 内存地址
 }
 
 class ex_mem extends Module {
@@ -23,142 +17,68 @@ class ex_mem extends Module {
     val ena1 = Input(Bool())
     val ena2 = Input(Bool())
 
-    // 公共内存信号
-    val E_mem_en = Input(Bool())
-    val E_mem_ren = Input(Bool())
-    val E_mem_wen = Input(Bool())
-    val E_mem_op = Input(UInt(6.W))
-    val E_mem_addr = Input(UInt(32.W))
-    val E_mem_wdata = Input(UInt(32.W))
-    
-    val M_mem_en = Output(Bool())
-    val M_mem_ren = Output(Bool())
-    val M_mem_wen = Output(Bool())
-    val M_mem_op = Output(UInt(6.W))
-    val M_mem_addr = Output(UInt(32.W))
-    val M_mem_wdata = Output(UInt(32.W))
-
     // Master通道输入
-    val E_master_ctrl_sign = Input(new ctrl_sign())
-    val E_master_reg_wen = Input(Bool())
-    val E_master_mem_sel = Input(Bool())
-    val E_master_reg_waddr = Input(UInt(5.W))
+    val E_master_ctrl_sign = Input(new ex_mem_ctrl_sign())
     val E_master_inst = Input(UInt(32.W))
-    val E_master_alu_res = Input(UInt(32.W))
     val E_master_pc = Input(UInt(32.W))
     
     // Slave通道输入
-    val E_slave_ctrl_sign = Input(new ctrl_sign())
-    val E_slave_reg_wen = Input(Bool())
-    val E_slave_mem_sel = Input(Bool())
-    val E_slave_reg_waddr = Input(UInt(5.W))
+    val E_slave_ctrl_sign = Input(new ex_mem_ctrl_sign())
     val E_slave_pc = Input(UInt(32.W))
     val E_slave_inst = Input(UInt(32.W))
-    val E_slave_alu_res = Input(UInt(32.W))
 
     // Master通道输出
-    val M_master_ctrl_sign = Output(new ctrl_sign())
-    val M_master_reg_wen = Output(Bool())
-    val M_master_mem_sel = Output(Bool())
-    val M_master_reg_waddr = Output(UInt(5.W))
+    val M_master_ctrl_sign = Output(new ex_mem_ctrl_sign())
     val M_master_inst = Output(UInt(32.W))
-    val M_master_alu_res = Output(UInt(32.W))
     val M_master_pc = Output(UInt(32.W))
 
     // Slave通道输出
-    val M_slave_ctrl_sign = Output(new ctrl_sign())
-    val M_slave_reg_wen = Output(Bool())
-    val M_slave_mem_sel = Output(Bool())
-    val M_slave_reg_waddr = Output(UInt(5.W))
+    val M_slave_ctrl_sign = Output(new ex_mem_ctrl_sign())
     val M_slave_pc = Output(UInt(32.W))
     val M_slave_inst = Output(UInt(32.W))
-    val M_slave_alu_res = Output(UInt(32.W))
   })
 
   // 定义Master通道寄存器结构体
   class MasterRegBundle extends Bundle {
-    val mem_en = Bool()
-    val mem_ren = Bool()
-    val mem_wen = Bool()
-    val mem_op = UInt(6.W)
-    val mem_addr = UInt(32.W)
-    val mem_wdata = UInt(32.W)
-    val ctrl_sign = new ctrl_sign()
-    val reg_wen = Bool()
-    val mem_sel = Bool()
-    val reg_waddr = UInt(5.W)
+    val ctrl_sign = new ex_mem_ctrl_sign()
     val inst = UInt(32.W)
-    val alu_res = UInt(32.W)
     val pc = UInt(32.W)
   }
   val masterReg = RegInit(0.U.asTypeOf(new MasterRegBundle))
 
   // 定义Slave通道寄存器结构体
   class SlaveRegBundle extends Bundle {
-    val ctrl_sign = new ctrl_sign()
-    val reg_wen = Bool()
-    val mem_sel = Bool()
-    val reg_waddr = UInt(5.W)
-    val pc = UInt(32.W)
+    val ctrl_sign = new ex_mem_ctrl_sign()
     val inst = UInt(32.W)
-    val alu_res = UInt(32.W)
+    val pc = UInt(32.W)
   }
   val slaveReg = RegInit(0.U.asTypeOf(new SlaveRegBundle))
 
   // Master通道寄存器逻辑
-  when(reset.asBool() | io.clear1) {
+  when(reset.asBool() || io.clear1) {
     masterReg := 0.U.asTypeOf(new MasterRegBundle)
   }.elsewhen(io.ena1) {
-    masterReg.mem_en := io.E_mem_en
-    masterReg.mem_ren := io.E_mem_ren
-    masterReg.mem_wen := io.E_mem_wen
-    masterReg.mem_op := io.E_mem_op
-    masterReg.mem_addr := io.E_mem_addr
-    masterReg.mem_wdata := io.E_mem_wdata
     masterReg.ctrl_sign := io.E_master_ctrl_sign
-    masterReg.reg_wen := io.E_master_reg_wen
-    masterReg.mem_sel := io.E_master_mem_sel
-    masterReg.reg_waddr := io.E_master_reg_waddr
     masterReg.inst := io.E_master_inst
-    masterReg.alu_res := io.E_master_alu_res
     masterReg.pc := io.E_master_pc
   }
 
   // Slave通道寄存器逻辑
-  when(reset.asBool() | io.clear2) {
+  when(reset.asBool() || io.clear2) {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena2) {
     slaveReg.ctrl_sign := io.E_slave_ctrl_sign
-    slaveReg.reg_wen := io.E_slave_reg_wen
-    slaveReg.mem_sel := io.E_slave_mem_sel
-    slaveReg.reg_waddr := io.E_slave_reg_waddr
-    slaveReg.pc := io.E_slave_pc
     slaveReg.inst := io.E_slave_inst
-    slaveReg.alu_res := io.E_slave_alu_res
+    slaveReg.pc := io.E_slave_pc
   }
-
-  io.M_mem_en := masterReg.mem_en
-  io.M_mem_ren := masterReg.mem_ren
-  io.M_mem_wen := masterReg.mem_wen
-  io.M_mem_op := masterReg.mem_op
-  io.M_mem_addr := masterReg.mem_addr
-  io.M_mem_wdata := masterReg.mem_wdata
 
   // 连接Master输出
   io.M_master_ctrl_sign := masterReg.ctrl_sign
-  io.M_master_reg_wen := masterReg.reg_wen
-  io.M_master_mem_sel := masterReg.mem_sel
-  io.M_master_reg_waddr := masterReg.reg_waddr
   io.M_master_inst := masterReg.inst
-  io.M_master_alu_res := masterReg.alu_res
   io.M_master_pc := masterReg.pc
 
   // 连接Slave输出
   io.M_slave_ctrl_sign := slaveReg.ctrl_sign
-  io.M_slave_reg_wen := slaveReg.reg_wen
-  io.M_slave_mem_sel := slaveReg.mem_sel
-  io.M_slave_reg_waddr := slaveReg.reg_waddr
-  io.M_slave_pc := slaveReg.pc
   io.M_slave_inst := slaveReg.inst
-  io.M_slave_alu_res := slaveReg.alu_res
+  io.M_slave_pc := slaveReg.pc
 }
