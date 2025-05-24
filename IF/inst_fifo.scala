@@ -9,9 +9,7 @@ class FifoEntry extends Bundle {
 
 // IO接口
 class InstFifoIO extends Bundle {
-  // 时钟和复位
-  val clk       = Input(Clock())
-  val rst       = Input(Bool())      // 系统复位
+  // 时钟和复位    删clk和rst，rst改为reset                                                             
   val fifo_rst  = Input(AsyncReset())      // FIFO专用复位（异步复位）
   
   val i_stall   = Input(Bool())      // 流水线暂停信号
@@ -49,7 +47,7 @@ class InstFifo extends Module {
   }
   
   // 同步复位
-  withReset(io.rst) {
+  withReset(reset) {
     val lines = Reg(Vec(16, new FifoEntry)) // 存储条目
   } 
   

@@ -20,8 +20,6 @@ class RegisterFileIO extends Bundle {
   val wen2   = Input(Bool())
   val wa2    = Input(UInt(5.W))
   val wd2    = Input(UInt(32.W))
-  // Clock 
-  val clk    = Input(Clock()) 
 }
 
 class RegisterFile extends Module {

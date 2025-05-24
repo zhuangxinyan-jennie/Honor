@@ -3,9 +3,7 @@ import chisel3.util._
 
 // PCReg的IO接口定义
 class PCRegIO extends Bundle {
-  // 时钟和复位
-  val clk               = Input(Clock())    // 时钟信号
-  val rst               = Input(Bool())     // 系统复位
+  // 时钟和复位 删clk和rst
   
   // 控制信号
   val pc_en             = Input(Bool())     // PC使能信号(当前代码未使用)
@@ -41,7 +39,7 @@ class PCReg extends Module {
   val pc_reg = RegInit("hbfc00000".U(32.W))
   
   // PC更新逻辑(优先级从高到低)
-  when(io.rst) {
+  when(reset) {
     // 1. 复位: 将PC设置为启动地址
     pc_reg := "hbfc00000".U
   }.elsewhen(io.M_except) {
@@ -71,7 +69,7 @@ class PCReg extends Module {
   }
 
   // 计算下一个PC值的组合逻辑(与上述when语句相同优先级)
-  io.pc_next := Mux(io.rst, "hbfc00000".U,
+  io.pc_next := Mux(reset, "hbfc00000".U,
                Mux(io.M_except, io.M_except_addr,
                Mux(io.M_flush_all, io.M_flush_all_addr,
                Mux(io.E_bj, io.E_bj_target,
