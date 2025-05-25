@@ -31,7 +31,6 @@ class MEM extends Module {
     val mem_bypass_data  = Output(UInt(32.W))
     val mem_bypass_valid = Output(Bool())
 
-    val flush            = Input(Bool())
   })
 
   val memAccess = Module(new MemAccess)
@@ -80,167 +79,155 @@ class MEM extends Module {
   io.sram.addr  := memAccess.io.data_sram_addr
   io.sram.wdata := memAccess.io.data_sram_wdata
   io.sram.funct3:= MuxCase(0.U, Array(
-    (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
-    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
-    (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
-    (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
-    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
+    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
+    (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
+    (io.cpu.mem_type === 3.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
+    (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
+    (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
   ))
 
   io.mem_bypass_valid := false.B
   io.mem_bypass_data  := 0.U
 
   // 状态机
-  when(io.flush) { //冲刷信号优先级最高
-    valid.foreach(_ := false.B)
-    dirty.foreach(_ := false.B)
-    addrReg   := 0.U
-    opReg     := 0.U
-    funct3Reg := 0.U
-    wdataReg  := 0.U
-    state     := sIdle
-    io.mem_bypass_valid := false.B
-  }.otherwise {
-    switch(state) {
-      is(sIdle) {
-        io.cpu.mem_ready := false.B
-        when(io.cpu.mem_en) {
-          addrReg := io.cpu.mem_addr
-          opReg   := MuxCase(0.U, Array(
-            (io.cpu.mem_write === false.B) -> "b0000011".U,
-            (io.cpu.mem_write === true.B) -> "b0100011".U
-          ))
-          funct3Reg := MuxCase(0.U, Array(
-            (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
-            (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
-            (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
-            (io.cpu.mem_type === 0.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
-            (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
-          ))
-          wdataReg := io.cpu.mem_wdata
-          state := sCheckCache
-        }
-      }
-
-      is(sCheckCache) {
-        val index = getIndex(addrReg)
-        val tag   = getTag(addrReg)
-        val hit   = valid(index) && (tags(index) === tag) //组合逻辑判断是否命中
-        val wordOffset = getWordOffset(addrReg)
-        val ramAddr = (index << log2Ceil(LINE_WORDS)).asUInt() + wordOffset
-
-        //添加MEM至EX阶段关于load指令的数据通路
-        when(hit && io.cpu.mem_en && (opReg === "b0000011".U)) {
-          io.mem_bypass_valid := true.B
-          io.mem_bypass_data := MuxLookup(funct3Reg, 0.U, Seq(
-            "b000".U -> Cat(Fill(24, dataRam.read(ramAddr)(7)), dataRam.read(ramAddr)(7,0)),
-            "b001".U -> Cat(Fill(16, dataRam.read(ramAddr)(15)), dataRam.read(ramAddr)(15,0)),
-            "b010".U -> dataRam.read(ramAddr),
-            "b100".U -> Cat(0.U(24.W), dataRam.read(ramAddr)(7,0)),
-            "b101".U -> Cat(0.U(16.W), dataRam.read(ramAddr)(15,0))
-          ))
-        }.otherwise {
-          io.mem_bypass_valid := false.B
-          io.mem_bypass_data := DontCare
-        }
-
-        when(hit) {
-          when(opReg === "b0000011".U) { // Load
-            memAccess.io.mem_en := true.B
-            memAccess.io.mem_op := opReg
-            memAccess.io.mem_funct3 := funct3Reg
-            memAccess.io.mem_addr := addrReg
-            memAccess.io.data_sram_rdata := dataRam.read(ramAddr) // 输入缓存数据
-
-            // 返回处理后的结果
-            io.cpu.mem_rdata := memAccess.io.mem_rdata
-            io.cpu.mem_ready := true.B
-            state := sIdle
-          }.otherwise { // Store
-            memAccess.io.mem_en := true.B
-            memAccess.io.mem_op := opReg
-            memAccess.io.mem_funct3 := funct3Reg
-            memAccess.io.mem_addr := addrReg
-            memAccess.io.mem_wdata := wdataReg
-
-            // 读取旧数据并合并
-            val oldData = dataRam.read(ramAddr)
-            val mask = (Fill(8, memAccess.io.data_sram_wen(0)) ##
-              Fill(8, memAccess.io.data_sram_wen(1)) ##
-              Fill(8, memAccess.io.data_sram_wen(2)) ##
-              Fill(8, memAccess.io.data_sram_wen(3)))
-            val newData = (oldData & (~mask).asUInt()) | (memAccess.io.data_sram_wdata & mask.asUInt())
-
-            // 写入合并后的数据
-            dataRam.write(ramAddr, newData)
-            dirty(index) := true.B
-            io.cpu.mem_ready := true.B
-            state := sIdle
-          }
-        }.otherwise { // Miss
-          lineAddr := (addrReg >> log2Ceil(LINE_BYTES)) << log2Ceil(LINE_BYTES)
-          savedIndex := index
-          wordCount := 0.U
-          state := Mux(dirty(index), sWriteBack, sFetchLine)
-        }
-      }
-
-      is(sWriteBack) {
-        memAccess.io.mem_en := true.B
-        memAccess.io.mem_op := "b0100011".U // Store操作
-        memAccess.io.mem_addr := lineAddr + (wordCount << 2)
-        memAccess.io.mem_wdata := dataRam.read((savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordCount)
-
-        wordCount := wordCount + 1.U
-        when(wordCount === (LINE_WORDS-1).U) {
-          dirty(savedIndex) := false.B // 清除脏位
-          state := sFetchLine     // 进入加载新行状态
-        }
-      }
-
-      is(sFetchLine) {
-        memAccess.io.mem_en := true.B
-        memAccess.io.mem_op := "b0000011".U // Load word
-        memAccess.io.mem_addr := lineAddr + (wordCount << 2)
-
-        val index = getIndex(lineAddr)
-        dataRam.write((savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordCount, io.sram.rdata)
-        wordCount := wordCount + 1.U
-        when(wordCount === (LINE_WORDS-1).U) {
-          valid(savedIndex) := true.B
-          tags(savedIndex)  := getTag(lineAddr)
-          dirty(savedIndex) := false.B
-          state := Mux(opReg === "b0100011".U, sStoreAfterMiss, sCheckCache)
-        }
-      }
-
-      is(sStoreAfterMiss) {
-        memAccess.io.mem_en := true.B
-        memAccess.io.mem_op := opReg
-        memAccess.io.mem_funct3 := funct3Reg
-        memAccess.io.mem_addr := addrReg
-        memAccess.io.mem_wdata := wdataReg
-
-        // 读取缓存旧数据
-        val wordOffset = getWordOffset(addrReg)
-        val ramAddr = (savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordOffset
-        val oldData = dataRam.read(ramAddr)
-        // 生成合并后的新数据
-        val mask = Wire(UInt(32.W))
-        mask := (Fill(8, memAccess.io.data_sram_wen(0)) ##
-          Fill(8, memAccess.io.data_sram_wen(1)) ##
-          Fill(8, memAccess.io.data_sram_wen(2)) ##
-          Fill(8, memAccess.io.data_sram_wen(3)))
-        val newData = (oldData & (~mask).asUInt()) | (memAccess.io.data_sram_wdata & mask.asUInt())
-
-        // 写入合并后的数据
-        dataRam.write(ramAddr, newData)
-        dirty(savedIndex) := true.B
-        io.cpu.mem_ready := true.B
-        state := sIdle
+  switch(state) {
+    is(sIdle) {
+      io.cpu.mem_ready := false.B
+      when(io.cpu.mem_en) {
+        addrReg := io.cpu.mem_addr
+        opReg   := MuxCase(0.U, Array(
+          (io.cpu.mem_write === false.B) -> "b0000011".U,
+          (io.cpu.mem_write === true.B) -> "b0100011".U
+        ))
+        funct3Reg := MuxCase(0.U, Array(
+          (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === false.B) -> "b000".U,
+          (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === false.B) -> "b001".U,
+          (io.cpu.mem_type === 3.U && io.cpu.mem_unsigned === false.B) -> "b010".U,
+          (io.cpu.mem_type === 1.U && io.cpu.mem_unsigned === true.B)  -> "b100".U,
+          (io.cpu.mem_type === 2.U && io.cpu.mem_unsigned === true.B)  -> "b101".U
+        ))
+        wdataReg := io.cpu.mem_wdata
+        state := sCheckCache
       }
     }
 
+    is(sCheckCache) {
+      val index = getIndex(addrReg)
+      val tag   = getTag(addrReg)
+      val hit   = valid(index) && (tags(index) === tag) //组合逻辑判断是否命中
+      val wordOffset = getWordOffset(addrReg)
+      val ramAddr = (index << log2Ceil(LINE_WORDS)).asUInt() + wordOffset
+
+      //添加MEM至EX阶段关于load指令的数据通路
+      when(hit && io.cpu.mem_en && (opReg === "b0000011".U)) {
+        io.mem_bypass_valid := true.B
+        io.mem_bypass_data := MuxLookup(funct3Reg, 0.U, Seq(
+          "b000".U -> Cat(Fill(24, dataRam.read(ramAddr)(7)), dataRam.read(ramAddr)(7,0)),
+          "b001".U -> Cat(Fill(16, dataRam.read(ramAddr)(15)), dataRam.read(ramAddr)(15,0)),
+          "b010".U -> dataRam.read(ramAddr),
+          "b100".U -> Cat(0.U(24.W), dataRam.read(ramAddr)(7,0)),
+          "b101".U -> Cat(0.U(16.W), dataRam.read(ramAddr)(15,0))
+        ))
+      }.otherwise {
+        io.mem_bypass_valid := false.B
+        io.mem_bypass_data := DontCare
+      }
+
+      when(hit) {
+        when(opReg === "b0000011".U) { // Load
+          memAccess.io.mem_en := true.B
+          memAccess.io.mem_op := opReg
+          memAccess.io.mem_funct3 := funct3Reg
+          memAccess.io.mem_addr := addrReg
+          memAccess.io.data_sram_rdata := dataRam.read(ramAddr) // 输入缓存数据
+
+          // 返回处理后的结果
+          io.cpu.mem_rdata := memAccess.io.mem_rdata
+          io.cpu.mem_ready := true.B
+          state := sIdle
+        }.otherwise { // Store
+          memAccess.io.mem_en := true.B
+          memAccess.io.mem_op := opReg
+          memAccess.io.mem_funct3 := funct3Reg
+          memAccess.io.mem_addr := addrReg
+          memAccess.io.mem_wdata := wdataReg
+
+          // 读取旧数据并合并
+          val oldData = dataRam.read(ramAddr)
+          val mask = (Fill(8, memAccess.io.data_sram_wen(0)) ##
+            Fill(8, memAccess.io.data_sram_wen(1)) ##
+            Fill(8, memAccess.io.data_sram_wen(2)) ##
+            Fill(8, memAccess.io.data_sram_wen(3)))
+          val newData = (oldData & (~mask).asUInt()) | (memAccess.io.data_sram_wdata & mask.asUInt())
+
+          // 写入合并后的数据
+          dataRam.write(ramAddr, newData)
+          dirty(index) := true.B
+          io.cpu.mem_ready := true.B
+          state := sIdle
+        }
+      }.otherwise { // Miss
+        lineAddr := (addrReg >> log2Ceil(LINE_BYTES)) << log2Ceil(LINE_BYTES)
+        savedIndex := index
+        wordCount := 0.U
+        state := Mux(dirty(index), sWriteBack, sFetchLine)
+      }
+    }
+
+    is(sWriteBack) {
+      memAccess.io.mem_en := true.B
+      memAccess.io.mem_op := "b0100011".U // Store操作
+      memAccess.io.mem_addr := lineAddr + (wordCount << 2)
+      memAccess.io.mem_wdata := dataRam.read((savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordCount)
+
+      wordCount := wordCount + 1.U
+      when(wordCount === (LINE_WORDS-1).U) {
+        dirty(savedIndex) := false.B // 清除脏位
+        state := sFetchLine     // 进入加载新行状态
+      }
+    }
+
+    is(sFetchLine) {
+      memAccess.io.mem_en := true.B
+      memAccess.io.mem_op := "b0000011".U // Load word
+      memAccess.io.mem_addr := lineAddr + (wordCount << 2)
+
+      val index = getIndex(lineAddr)
+      dataRam.write((savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordCount, io.sram.rdata)
+      wordCount := wordCount + 1.U
+      when(wordCount === (LINE_WORDS-1).U) {
+        valid(savedIndex) := true.B
+        tags(savedIndex)  := getTag(lineAddr)
+        dirty(savedIndex) := false.B
+        state := Mux(opReg === "b0100011".U, sStoreAfterMiss, sCheckCache)
+      }
+    }
+
+    is(sStoreAfterMiss) {
+      memAccess.io.mem_en := true.B
+      memAccess.io.mem_op := opReg
+      memAccess.io.mem_funct3 := funct3Reg
+      memAccess.io.mem_addr := addrReg
+      memAccess.io.mem_wdata := wdataReg
+
+      // 读取缓存旧数据
+      val wordOffset = getWordOffset(addrReg)
+      val ramAddr = (savedIndex << log2Ceil(LINE_WORDS)).asUInt() + wordOffset
+      val oldData = dataRam.read(ramAddr)
+      // 生成合并后的新数据
+      val mask = Wire(UInt(32.W))
+      mask := (Fill(8, memAccess.io.data_sram_wen(0)) ##
+        Fill(8, memAccess.io.data_sram_wen(1)) ##
+        Fill(8, memAccess.io.data_sram_wen(2)) ##
+        Fill(8, memAccess.io.data_sram_wen(3)))
+      val newData = (oldData & (~mask).asUInt()) | (memAccess.io.data_sram_wdata & mask.asUInt())
+
+      // 写入合并后的数据
+      dataRam.write(ramAddr, newData)
+      dirty(savedIndex) := true.B
+      io.cpu.mem_ready := true.B
+      state := sIdle
+    }
   }
 }
 
