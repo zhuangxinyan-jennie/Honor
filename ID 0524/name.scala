@@ -129,9 +129,12 @@ object Exception {
   val NO_EXCEPTION = true.B //无异常
 }
 object InstType {
-  val J_TYPE = 1.U(4.W) //J型指令
-  val I_TYPE = 2.U(4.W) //I型指令
-  val B_TYPE = 3.U(4.W) //B型指令
-  val S_TYPE = 4.U(4.W) //S型指令
-  val U_TYPE = 5.U(4.W) //U型指令
+  val J_TYPE = 1.U(4.W)
+  val R_TYPE = 2.U(4.W)
+  val I_TYPE = 3.U(4.W)
+  val S_TYPE = 4.U(4.W)
+  val B_TYPE = 5.U(4.W)
+  val U_TYPE = 6.U(4.W)
+  val FENCE_TYPE = 7.U(4.W)
+  val CSR_TYPE = 8.U(4.W)
 }
