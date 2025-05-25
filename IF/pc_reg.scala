@@ -23,9 +23,9 @@ class PCRegIO extends Bundle {
   // 流控
   val D_fifo_full      = Input(Bool())      // 指令FIFO满信号(反压)
   
-  // 取指成功指示
-  val F_inst_data_ok1  = Input(Bool())      // 第一条指令获取成功
-  val F_inst_data_ok2  = Input(Bool())      // 第二条指令获取成功
+  // 取指成功指示（默认 删除？）
+  //val F_inst_data_ok1  = Input(Bool())      // 第一条指令获取成功
+  //val F_inst_data_ok2  = Input(Bool())      // 第二条指令获取成功
   
   // 输出
   val pc_next          = Output(UInt(32.W)) // 下一个PC值
