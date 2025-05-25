@@ -6,13 +6,13 @@ class PCRegIO extends Bundle {
   // 时钟和复位 删clk和rst
   
   // 控制信号
-  val pc_en             = Input(Bool())     // PC使能信号(当前代码未使用)
+  //val pc_en             = Input(Bool())     // PC使能信号(当前代码未使用)
   
   // 异常处理
-  val M_except          = Input(Bool())     // 异常发生信号
-  val M_except_addr     = Input(UInt(32.W)) // 异常处理地址
-  val M_flush_all       = Input(Bool())     // 流水线刷新信号
-  val M_flush_all_addr  = Input(UInt(32.W)) // 刷新后地址
+  //val M_except          = Input(Bool())     // 异常发生信号
+  //val M_except_addr     = Input(UInt(32.W)) // 异常处理地址
+  //val M_flush_all       = Input(Bool())     // 流水线刷新信号
+  //val M_flush_all_addr  = Input(UInt(32.W)) // 刷新后地址
   
   // 分支预测和执行
   val E_bj             = Input(Bool())      // 执行阶段实际分支跳转信号
