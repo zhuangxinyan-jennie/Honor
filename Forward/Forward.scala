@@ -30,7 +30,7 @@ class ForwardIO extends Bundle {
   // 3. 来自EX/MEM流水线寄存器输出的有效ALU结果 (MEM阶段ALU数据透传) - 主路径
   val exmem_master_alu_valid   = Input(Bool())    // EX/MEM主路径ALU结果有效且指令写GPR  !ex_mem.M_master_ctrl_sign.mem_write && !ex_mem.M_master_ctrl_sign.mem_read && (!(ex_mem.W_rd1===0.U)||!(ex_mem.W_rd2===0.U))
   val exmem_master_alu_rd_addr = Input(UInt(5.W)) // EX/MEM主路径指令的目标寄存器 ex_mem.W_rd1
-  val exmem_master_alu_data    = Input(UInt(32.W))  // EX/MEM主路径ALU结果数据  ex_mem的寄存器写数据 ex_mem.M_master_ctrl_sign.mem_wdata
+  val exmem_master_alu_data    = Input(UInt(32.W))  // EX/MEM主路径ALU结果数据  ex_mem的寄存器写数据 ex_mem.result1
 
   // 4. 来自EX/MEM流水线寄存器输出的有效ALU结果 (MEM阶段ALU数据透传) - 从路径
   val exmem_slave_alu_valid   = Input(Bool())     // EX/MEM从路径ALU结果有效且指令写GPR
