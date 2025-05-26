@@ -131,6 +131,7 @@ class DualIssueExIO extends Bundle {
   // Dual instruction inputs
   val ExIn1 = Flipped(new DeToExIO)
   val ExIn2 = Flipped(new DeToExIO)
+  val slave_ena = Input(Bool())
   // val pc1       = Input(UInt(32.W))
   // val pc2       = Input(UInt(32.W))
 
@@ -222,9 +223,9 @@ class DualIssueEx extends Module {
   io.mem2.memUnsigned := false.B
 
   // CU
-  io.cu.ex_branch_mispredict_detected_i = true.B
-  io.cu.ex_master_path_data_ready_i = false.B
-  io.cu.ex_slave_path_data_ready_i = false.B
+  io.cu.ex_branch_mispredict_detected_i := true.B
+  io.cu.ex_master_path_data_ready_i := false.B
+  io.cu.ex_slave_path_data_ready_i := false.B
 
   // BP
   io.bpVerify := false.B
@@ -534,7 +535,7 @@ class DualIssueEx extends Module {
     io.valid2 := true.B
   }.otherwise {
     io.result2 := aluResult2
-    io.valid2 := io.ExIn2.reg_write && !io.ExIn2.exception
+    io.valid2 := io.ExIn2.reg_write && !io.ExIn2.exception && io.slave_ena
   }
 
 
