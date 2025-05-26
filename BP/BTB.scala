@@ -3,21 +3,16 @@ import chisel3.util._
 
 class BTB extends Module with RequireAsyncReset{
   val io = IO(new Bundle {
-    val enaD          = Input(Bool())
-    val branchE       = Input(Bool())
-    val actualTakeE   = Input(Bool())
-    val instrD        = Input(UInt(32.W))
-    val pcD           = Input(UInt(32.W))
-    val pcE           = Input(UInt(32.W))
-    val pcETarget     = Input(UInt(32.W))
-    val predTakeD     = Output(Bool())
-    val branchTargetD = Output(UInt(32.W))
+    val enaD          = Input(Bool())   //全局读使能，ID模块译码后判断为跳转语句，来自ID模块
+    val pcD           = Input(UInt(32.W))   //需要预测跳转的的pc值，来自ID模块
+    val branchE       = Input(Bool())   //全局写使能，EX模块对跳转语句进行运算，是跳转语句，来自EX模块
+    val actualTakeE   = Input(Bool())   //若EX遇到了跳转语句，EX实际运算的跳转结果
+    val pcE           = Input(UInt(32.W))   //EX模块进行分支计算的源pc值
+    val pcETarget     = Input(UInt(32.W))   //EX模块进行分支计算的跳转pc结果
+    val predTakeD     = Output(Bool())    //输出给PC模块，预测是否跳转
+    val branchTargetD = Output(UInt(32.W))  //输出给pc模块，若预测跳转，则输出跳转目标pc，否则该信号无效
   })
 
-  // Combinational jump check
-  val is_jmp = (io.instrD(6,0) === "b1100111".U) ||
-               (io.instrD(6,0) === "b1100011".U) ||
-               (io.instrD(6,0) === "b1101111".U)
 
   // Global History Registers
   val GHR       = RegInit(0.U(64.W))
@@ -52,7 +47,7 @@ class BTB extends Module with RequireAsyncReset{
   val T4_result  = T4_tage(hash_T4)
 
   // Prediction output
-  io.predTakeD := Mux(is_jmp && io.enaD,
+  io.predTakeD := Mux(io.enaD,
     Mux(T4_result(5,2) === tag_sel_T4, T4_result(8),
     Mux(T3_result(5,2) === tag_sel_T3, T3_result(8),
     Mux(T2_result(5,2) === tag_sel_T2, T2_result(8),

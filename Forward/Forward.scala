@@ -9,8 +9,8 @@ class ForwardIO extends Bundle {
   // --- 输入 ---
   // ID阶段当前指令的源寄存器信息
   // 主指令 (Master)
-  val id_master_rs_addrs   = Input(Vec(numOperandsFixed, UInt(5.W)))
-  val id_master_rs_data_rf = Input(Vec(numOperandsFixed, UInt(32.W))) // 从寄存器堆读出的数据 (已包含WB->ID旁路)
+  val id_master_rs_addrs   = Input(Vec(numOperandsFixed, UInt(5.W))) //注意这里是两个vec，也就是说每个指令有两个操作数
+  val id_master_rs_data_rf = Input(Vec(numOperandsFixed, UInt(32.W))) // 从ID阶段拿到的数据，注意，数据不再由ID送给id_ex，而是由ID送给Forward，继而送给id_ex
 
   // 从指令 (Slave)
   val id_slave_rs_addrs    = Input(Vec(numOperandsFixed, UInt(5.W)))
@@ -18,19 +18,19 @@ class ForwardIO extends Bundle {
 
   // 前馈源:
   // 1. 来自当前EX阶段的有效ALU结果 - 主路径 ("EX -> ID" 前馈)
-  val ex_master_alu_valid   = Input(Bool())    // EX主路径ALU结果有效且指令写GPR
-  val ex_master_alu_rd_addr = Input(UInt(5.W)) // EX主路径指令的目标寄存器
-  val ex_master_alu_data    = Input(UInt(32.W))  // EX主路径ALU结果数据
+  val ex_master_alu_valid   = Input(Bool())    // EX主路径ALU结果有效且指令写GPR  id_ex.E_master_ctrl_sign.reg_write && !id_ex.E_master_ctrl_sign.mem_read && !id_ex.E_master_ctrl_sign.mem_write && DualIssueExIO.valid1
+  val ex_master_alu_rd_addr = Input(UInt(5.W)) // EX主路径指令的目标寄存器  DualIssueExIO.rd1
+  val ex_master_alu_data    = Input(UInt(32.W))  // EX主路径ALU结果数据  DualIssueExIO.result1
 
   // 2. 来自当前EX阶段的有效ALU结果 - 从路径 ("EX -> ID" 前馈)
-  val ex_slave_alu_valid   = Input(Bool())     // EX从路径ALU结果有效且指令写GPR
+  val ex_slave_alu_valid   = Input(Bool())     // EX从路径ALU结果有效且指令写GPR  这些与上同理，换为slave即可
   val ex_slave_alu_rd_addr = Input(UInt(5.W))  // EX从路径指令的目标寄存器
   val ex_slave_alu_data    = Input(UInt(32.W))   // EX从路径ALU结果数据
 
   // 3. 来自EX/MEM流水线寄存器输出的有效ALU结果 (MEM阶段ALU数据透传) - 主路径
-  val exmem_master_alu_valid   = Input(Bool())    // EX/MEM主路径ALU结果有效且指令写GPR
-  val exmem_master_alu_rd_addr = Input(UInt(5.W)) // EX/MEM主路径指令的目标寄存器
-  val exmem_master_alu_data    = Input(UInt(32.W))  // EX/MEM主路径ALU结果数据
+  val exmem_master_alu_valid   = Input(Bool())    // EX/MEM主路径ALU结果有效且指令写GPR  !ex_mem.M_master_ctrl_sign.mem_write && !ex_mem.M_master_ctrl_sign.mem_read && (!(ex_mem.W_rd1===0.U)||!(ex_mem.W_rd2===0.U))
+  val exmem_master_alu_rd_addr = Input(UInt(5.W)) // EX/MEM主路径指令的目标寄存器 ex_mem.W_rd1
+  val exmem_master_alu_data    = Input(UInt(32.W))  // EX/MEM主路径ALU结果数据  ex_mem的寄存器写数据 ex_mem.result1
 
   // 4. 来自EX/MEM流水线寄存器输出的有效ALU结果 (MEM阶段ALU数据透传) - 从路径
   val exmem_slave_alu_valid   = Input(Bool())     // EX/MEM从路径ALU结果有效且指令写GPR
@@ -38,9 +38,9 @@ class ForwardIO extends Bundle {
   val exmem_slave_alu_data    = Input(UInt(32.W))   // EX/MEM从路径ALU结果数据
 
   // 5. 来自MEM阶段实际访存的有效Load结果
-  val mem_load_valid       = Input(Bool())    // MEM阶段Load数据有效且指令写GPR
-  val mem_load_rd_addr     = Input(UInt(5.W)) // MEM阶段Load指令的目标寄存器
-  val mem_load_data        = Input(UInt(32.W))  // MEM阶段Load出的数据
+  val mem_load_valid       = Input(Bool())    // MEM阶段Load数据有效且指令写GPR  MEM.io.cpu.mem_bypass_valid && ex_mem.M_master_ctrl_sign.mem_en && !ex_mem.M_master_ctrl_sign.mem_write
+  val mem_load_rd_addr     = Input(UInt(5.W)) // MEM阶段Load指令的目标寄存器  ex_mem.W_rd1
+  val mem_load_data        = Input(UInt(32.W))  // MEM阶段Load出的数据  MEM.io.cpu.mem_bypass_data
 
   // --- 输出 ---
   // 经过前馈选择后的最终操作数值，送往ID/EX寄存器
