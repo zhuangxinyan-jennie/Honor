@@ -5,9 +5,9 @@ class id_ex_ctrl_sign extends Bundle {
   val inst_type = UInt(4.W)
   val rs1 = UInt(5.W)
   val rs2 = UInt(5.W)
-  val rd = UInt(5.W)
   val ex_rs1_data = UInt(32.W)
   val ex_rs2_data = UInt(32.W)
+  val rd = UInt(5.W)
   val imm = UInt(32.W)
   val alu_op = UInt(5.W)
   val alu_op1 = UInt(2.W)
@@ -34,6 +34,7 @@ class id_ex extends Module {
     // Slave通道输入
     val D_slave_ctrl_sign = Input(new id_ex_ctrl_sign())
     val final_slave_rs_data  = Input(Vec(numOperandsFixed, UInt(32.W)))
+    val D_slave_ena = Input(Bool())
 
     // Master通道输出
     val E_master_ctrl_sign = Output(new id_ex_ctrl_sign())
@@ -42,6 +43,7 @@ class id_ex extends Module {
     // Slave通道输出
     val E_slave_ctrl_sign = Output(new id_ex_ctrl_sign())
     val final_slave_rs_data  = Output(Vec(numOperandsFixed, UInt(32.W)))
+    val E_slave_ena = Output(Bool())
   })
   
   // 定义Master通道寄存器结构体
@@ -55,6 +57,7 @@ class id_ex extends Module {
   class SlaveRegBundle extends Bundle {
     val ctrl_sign = new id_ex_ctrl_sign()
     val rs_data = Vec(numOperandsFixed, UInt(32.W))
+    val ena = Bool() // Slave通道使能信号
   }
   val slaveReg = RegInit(0.U.asTypeOf(new SlaveRegBundle))
 
@@ -67,11 +70,12 @@ class id_ex extends Module {
   }
 
   // Slave通道寄存器逻辑
-  when(reset.asBool() || io.clear) {
+  when(reset.asBool() || io.clear || !io.D_slave_ena) {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena) {
     slaveReg.ctrl_sign := io.D_slave_ctrl_sign
     slaveReg.rs_data := io.final_slave_rs_data
+    slaveReg.ena := io.D_slave_ena
   }
 
   // 连接寄存器输出到IO
@@ -80,4 +84,5 @@ class id_ex extends Module {
 
   io.E_slave_ctrl_sign := slaveReg.ctrl_sign
   io.final_slave_rs_data := slaveReg.rs_data
+  io.E_slave_ena := slaveReg.ena
 }
