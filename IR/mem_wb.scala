@@ -6,8 +6,8 @@ class mem_wb extends Module {
 
     // Master通道信号
     val M_master_reg_wen = Input(Bool())
-    val M_master_reg_waddr = Input(UInt(5.W))  //直接来自ex_mem
-    val M_master_reg_wdata = Input(UInt(32.W))
+    val M_master_reg_waddr = Input(UInt(5.W))  //直接来自ex_mem.W_rd1
+    val M_master_reg_wdata = Input(UInt(32.W)) //访存指令来自mem，非访存指令来自ex_mem.result1
     
     val W_master_reg_wen = Output(Bool())
     val W_master_reg_waddr = Output(UInt(5.W))
@@ -16,7 +16,7 @@ class mem_wb extends Module {
     // Slave通道信号
     val M_slave_reg_wen = Input(Bool())
     val M_slave_reg_waddr = Input(UInt(5.W))
-    val M_slave_reg_wdata = Input(UInt(32.W))
+    val M_slave_reg_wdata = Input(UInt(32.W)) //直接来自ex_mem.result2
 
     val W_slave_reg_wen = Output(Bool())
     val W_slave_reg_waddr = Output(UInt(5.W))

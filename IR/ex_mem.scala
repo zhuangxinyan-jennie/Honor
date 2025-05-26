@@ -4,7 +4,7 @@ import chisel3.util._
 class ex_mem_ctrl_sign extends Bundle {
   val mem_en = Bool()               // 内存使能
   val mem_write = Bool()            // 是否写(0:rd)
-  val mem_type = UInt(2.W)          // 访存类型，NONE B H W
+  val mem_type = UInt(2.W)          // 访存类型
   val mem_unsigned = Bool()         // 内存无符号访存使能
   val mem_wdata = UInt(32.W)        // 内存写数据
   val mem_addr = UInt(32.W)         // 内存地址
@@ -16,11 +16,11 @@ class ex_mem extends Module {
 
     // Master通道输入
     val E_master_ctrl_sign = Input(new ex_mem_ctrl_sign())
-    val E_rd1 = Input(UInt(5.W))
-    val E_result1 = Input(UInt(32.W))
+    val E_rd1 = Input(UInt(5.W))      //来自EX阶段的寄存器地址  
+    val E_result1 = Input(UInt(32.W)) //来自EX阶段的计算结果
 
     // Slave通道输入
-    val E_slave_ctrl_sign = Input(new ex_mem_ctrl_sign())
+    val E_slave_ctrl_sign = Input(new ex_mem_ctrl_sign()) //从指令不进行访存，mem_en置为false
     val E_rd2 = Input(UInt(5.W))
     val E_result2 = Input(UInt(32.W))
 
