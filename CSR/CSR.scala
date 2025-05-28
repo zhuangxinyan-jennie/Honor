@@ -6,8 +6,6 @@ import chisel3.util._
 import CSR.exceptcode
 
 class CSR0 extends Bundle{
-    val clk = Input(Clock())
-    val rst = Input(Bool())
 
     //流水线控制
     val stallE = Input(Bool())
