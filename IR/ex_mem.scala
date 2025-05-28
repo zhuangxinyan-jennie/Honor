@@ -21,7 +21,6 @@ class ex_mem extends Module {
     val E_valid1 = Input(Bool())      //来自EX阶段的有效信号
 
     // Slave通道输入
-    val E_slave_ctrl_sign = Input(new ex_mem_ctrl_sign()) //从指令不进行访存，mem_en置为false
     val E_rd2 = Input(UInt(5.W))
     val E_result2 = Input(UInt(32.W))
     val E_valid2 = Input(Bool())      
@@ -33,7 +32,6 @@ class ex_mem extends Module {
     val W_valid1 = Output(Bool())     // Master通道输出的有效信号
 
     // Slave通道输出
-    val M_slave_ctrl_sign = Output(new ex_mem_ctrl_sign())
     val W_rd2 = Output(UInt(5.W))
     val W_result2 = Output(UInt(32.W))
     val W_valid2 = Output(Bool())     // Slave通道输出的有效信号
@@ -50,7 +48,6 @@ class ex_mem extends Module {
 
   // 定义Slave通道寄存器结构体
   class SlaveRegBundle extends Bundle {
-    val ctrl_sign = new ex_mem_ctrl_sign()
     val rd = UInt(5.W)
     val result2 = UInt(32.W)
     val valid2 = Bool()
@@ -71,7 +68,6 @@ class ex_mem extends Module {
   when(reset.asBool()) {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena) {
-    slaveReg.ctrl_sign := io.E_slave_ctrl_sign
     slaveReg.rd := io.E_rd2
     slaveReg.result2 := io.E_result2
     slaveReg.valid2 := io.E_valid2
@@ -84,7 +80,6 @@ class ex_mem extends Module {
   io.W_valid1 := masterReg.valid1
 
   // 连接Slave输出
-  io.M_slave_ctrl_sign := slaveReg.ctrl_sign
   io.W_rd2 := slaveReg.rd
   io.W_result2 := slaveReg.result2
   io.W_valid2 := slaveReg.valid2
