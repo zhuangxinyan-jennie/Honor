@@ -10,6 +10,7 @@ class ControlUnitIO extends Bundle {
   val idex_master_is_load_i         = Input(Bool()) // from ID/EX  E_master_ctrl_sign.mem_read||E_master_ctrl_sign.mem_write
   val is_master_path_active_in_ex_i = Input(Bool()) // from ID/EX  !(E_master_ctrl_sign.inst_type===0.U)
   val is_slave_path_active_in_ex_i  = Input(Bool()) // from ID/EX  !(E_slave_ctrl_sign.inst_type===0.U)
+  val BP_predTakeD                  = Input(Bool()) // from BP  BTB.io.predTakeD
 
   // === Outputs ===
   val cu_ififo_flush_o     = Output(Bool()) // to InstFifo  InstFifoIO.fifo_rst
@@ -21,7 +22,7 @@ class ControlUnitIO extends Bundle {
 class ControlUnit extends Module {
   val io = IO(new ControlUnitIO())
 
-  io.cu_ififo_flush_o := io.ex_branch_mispredict_detected_i
+  io.cu_ififo_flush_o := io.ex_branch_mispredict_detected_i || io.BP_predTakeD
 
   val master_path_requires_stall = io.is_master_path_active_in_ex_i && !io.ex_master_path_data_ready_i
   val slave_path_requires_stall  = io.is_slave_path_active_in_ex_i  && !io.ex_slave_path_data_ready_i
