@@ -35,7 +35,7 @@ class BaseDecode extends Module {
 
   // ALU操作类型常量
   val ALU_ADD  = 0.U(5.W)  // 加法ADD/ADDI/LOAD/STORE/AUIPC
-  val ALU_SUB  = 1.U(5.W)  // 减法SUB/��֧�Ƚ�
+  val ALU_SUB  = 1.U(5.W)  // 减法SUB/??????
   val ALU_SLL  = 2.U(5.W)  // 左移SLL/SLLI
   val ALU_SLT  = 3.U(5.W)  // 有符号比较SLT/SLTI/BLT/BGE
   val ALU_SLTU = 4.U(5.W)  // 无符号比较SLTU/SLTIU/BLTU/BGEU
@@ -168,9 +168,9 @@ class BaseDecode extends Module {
   }
 
   //提取源寄存器
-  io.rs1 := io.inst(19, 15)
-  io.rs2 := io.inst(24, 20)
-  // io.rd := io.inst(11, 7) //底下已经写好了目的寄存器地址的分类179行
+//   io.rs1 := io.inst(19, 15)
+//   io.rs2 := io.inst(24, 20)
+//   // io.rd := io.inst(11, 7) //底下已经写好了目的寄存器地址的分类179行
 
   //---------------------------------------------------------------------------------------------------
   // imm 立即数
@@ -368,7 +368,6 @@ class BaseDecode extends Module {
 
   ))
   io.exception := io.inst_type === 0.U
-
   io.ex_rs1_data := io.reg_rs1_data  // 将寄存器读取的数据传给执行阶段
   io.ex_rs2_data := io.reg_rs2_data  // 将寄存器读取的数据传给执行阶段
   io.pc_out := io.pc_in  // 将输入的PC值直接传递给输出
