@@ -40,6 +40,7 @@ class DualIssueDecode extends Module {
       val mem_unsigned = Bool()
       val exception = Bool()
       val pc_out = UInt(32.W)
+      val bp_en = Bool()
     })
     val decode2 = Output(new Bundle {
       val inst_type = UInt(4.W)
@@ -144,6 +145,7 @@ class DualIssueDecode extends Module {
   io.decode1.pc_out := io.pc1
   io.decode1.ex_rs1_data := decode1.io.ex_rs1_data
   io.decode1.ex_rs2_data := decode1.io.ex_rs2_data
+  io.decode1.bp_en := (decode1.io.inst_type === 5.U)||(decode1.io.alu_op === ALU_COPY &&(decode1.io.inst_type === J_TYPE || decode1.io.inst_type === I_TYPE))
   // 从指令使能时，选择从译码模块的输出，否则选择0
   io.decode2.inst_type := Mux(io.slave_ena, decode2.io.inst_type, 0.U)
   io.decode2.rs1 := Mux(io.slave_ena, decode2.io.rs1, 0.U)
