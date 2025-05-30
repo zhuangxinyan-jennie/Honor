@@ -2,84 +2,68 @@ import chisel3._
 import chisel3.util._
 
 class PCRegIO extends Bundle {
-  // Define constants
   val PAddrBits = 32
 
-  // Inputs from EX stage (or higher-level control)
   val EX_mispredict_resolved       = Input(Bool())
   val EX_pc_of_mispredicted_branch = Input(UInt(PAddrBits.W))
   val EX_actual_branch_target      = Input(UInt(PAddrBits.W))
   val EX_branch_actually_taken     = Input(Bool())
 
-  // Inputs from ID stage
-  val D_bj         = Input(Bool()) // ID predicts branch taken
-  val D_bj_target  = Input(UInt(PAddrBits.W)) // ID's predicted branch target
+  val D_bj         = Input(Bool())
+  val D_bj_target  = Input(UInt(PAddrBits.W))
 
-  // Feedback from InstFifo (for backpressure)
   val F_fifo_full         = Input(Bool())
   val F_fifo_almost_full  = Input(Bool())
 
-  // Outputs of PCReg
-  val pc_next = Output(UInt(PAddrBits.W)) // Next PC (combinational, to I-Mem)
-  val pc_curr = Output(UInt(PAddrBits.W)) // Current PC (sequential, to InstFifo write addr)
+  val pc_effective_out = Output(UInt(PAddrBits.W))
 }
 
 class PCReg extends Module {
-  // Define constants
-  val PAddrBits  = 32
-  val ResetPCVal = "hbfc00000".U(PAddrBits.W)
-  val FetchWidth = 2 // Number of instructions fetched per cycle
-  val InstrBytes = 4 // Bytes per instruction
+  val PAddrBits     = 32
+  val ResetPCVal    = "hbfc00000".U(PAddrBits.W)
+  val FetchWidthInt = 2
+  val InstrBytes    = 4.U(PAddrBits.W)
 
   val io = IO(new PCRegIO)
 
   val pc_reg = RegInit(ResetPCVal)
 
-  // Calculate potential next PC values
-  val pc_plus_4 = pc_reg + InstrBytes.U
-  val pc_plus_8 = pc_reg + (InstrBytes * FetchWidth).U
+  val actual_pc_for_current_fetch = Wire(UInt(PAddrBits.W))
 
-  // --- Determine pc_next (combinational logic) ---
-  val next_pc_val_on_ex_mispredict = Mux(io.EX_branch_actually_taken,
-                                         io.EX_actual_branch_target,
-                                         io.EX_pc_of_mispredicted_branch + InstrBytes.U)
+  val is_ex_redirect = io.EX_mispredict_resolved
+  val ex_redirect_target = Mux(io.EX_branch_actually_taken,
+                               io.EX_actual_branch_target,
+                               io.EX_pc_of_mispredicted_branch + InstrBytes)
 
-  val next_pc_val_on_d_bj = io.D_bj_target
+  val is_id_redirect = io.D_bj && !is_ex_redirect
 
-  val next_pc_val_sequential = Mux(io.F_fifo_full,
-                                   pc_reg,
-                                   Mux(io.F_fifo_almost_full && FetchWidth > 1,
-                                       pc_plus_4,
-                                       Mux(FetchWidth > 1, pc_plus_8, pc_plus_4)
-                                   )
-                                )
-  // Assign pc_next based on priority
-  when (reset.asBool) {
-    io.pc_next := ResetPCVal
-  } .elsewhen(io.EX_mispredict_resolved) {
-    io.pc_next := next_pc_val_on_ex_mispredict
-  } .elsewhen(io.D_bj) {
-    io.pc_next := next_pc_val_on_d_bj
+  when(reset.asBool) {
+    actual_pc_for_current_fetch := ResetPCVal
+  } .elsewhen(is_ex_redirect) {
+    actual_pc_for_current_fetch := ex_redirect_target
+  } .elsewhen(is_id_redirect) {
+    actual_pc_for_current_fetch := io.D_bj_target
   } .otherwise {
-    io.pc_next := next_pc_val_sequential
+    actual_pc_for_current_fetch := pc_reg
   }
 
-  // --- Update pc_reg (sequential logic) ---
-  when(io.EX_mispredict_resolved) {
-    pc_reg := next_pc_val_on_ex_mispredict
-  } .elsewhen(io.D_bj) {
-    pc_reg := next_pc_val_on_d_bj
-  } .elsewhen(io.F_fifo_full) {
-    pc_reg := pc_reg // Stall
-  } .elsewhen(io.F_fifo_almost_full && FetchWidth > 1) {
-    pc_reg := pc_plus_4 // Fetch one instruction
-  } .elsewhen(!io.F_fifo_full && !io.F_fifo_almost_full && FetchWidth > 1) {
-    pc_reg := pc_plus_8 // Fetch two instructions
-  } .elsewhen(!io.F_fifo_full) { // Covers single fetch width or dual width with only space for 1 (but not almost_full)
-    pc_reg := pc_plus_4 // Fetch one instruction
+  io.pc_effective_out := actual_pc_for_current_fetch
+
+  val next_pc_reg_val_candidate = Wire(UInt(PAddrBits.W))
+
+  when(io.F_fifo_full) {
+    next_pc_reg_val_candidate := actual_pc_for_current_fetch
+  } .elsewhen(io.F_fifo_almost_full && (FetchWidthInt > 1)) {
+    next_pc_reg_val_candidate := actual_pc_for_current_fetch + InstrBytes
+  } .elsewhen(FetchWidthInt > 1) {
+    next_pc_reg_val_candidate := actual_pc_for_current_fetch + (InstrBytes * FetchWidthInt.U)
   } .otherwise {
-    pc_reg := pc_reg // Should be covered by F_fifo_full
+    next_pc_reg_val_candidate := actual_pc_for_current_fetch + InstrBytes
   }
 
-  io.pc_curr := pc_reg
+  when(reset.asBool) {
+    pc_reg := ResetPCVal
+  } .otherwise {
+    pc_reg := next_pc_reg_val_candidate
+  }
 }
