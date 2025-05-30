@@ -62,7 +62,7 @@ class Top extends Module {
 
   
     // ===== I-Cache 接口连接 =====
-    io.inst_addr:=pcReg.io.pc_next
+    io.read_push:=decode.io.fifo_push
     instFifo.io.fifo_rst:=cu.io.cu_ififo_flush_o 
     instFifo.io.i_stall:=cu_ififo_rd_stall_o
    
@@ -70,8 +70,7 @@ class Top extends Module {
     instFifo.io.write_data2:=io.inst_data2
     instFifo.io.write_address1:=pcReg.io.pc_curr
     instFifo.io.write_address2:=pcReg.io.pc_curr + 4.U
-    //instFifo.io.read_en1:=
-    //instFifo.io.read_en2:=
+  
 
 
     // ===== D-Cache 接口连接 =====
@@ -271,8 +270,8 @@ class Top extends Module {
     ex.io.mem2_rspData:=mem.io.cpu.mem_rdata
 
     //=======BP==========
-    bp.io.enaD:=
-    bp.io.pcD:=
+    bp.io.enaD:=decode.io.decode_branch_valid
+    bp.io.pcD:=decode.io.decode1.pc_out
    
     bp.io.branchE:=ex.io.branch1
     bp.io.pcE:=ex.io.pc1Out
