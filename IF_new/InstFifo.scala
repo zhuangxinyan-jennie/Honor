@@ -43,6 +43,7 @@ class InstFifoIO extends Bundle {
   val flush_due_to_EX_mispredict    = Input(Bool()) // EX判断是否BP预测错误，与CU和pcreg的输入都是一样的
 }
 
+
 class InstFifo extends Module {
   val PAddrBits   = 32
   val InstrBits   = 32
