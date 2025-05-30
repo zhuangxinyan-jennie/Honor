@@ -43,22 +43,6 @@ class Top extends Module {
     val bp=Module(new BTB)
     val csr=Module(new Csr)
 
-    //id的寄存器
-    val rs1_a            =RegInit(UInt(32.W))
-    val rs2_a            =RegInit(UInt(32.W))
-    val rs1_b            =RegInit(UInt(32.W))
-    val rs2_b            =RegInit(UInt(32.W))
-
-    rs1_a := decode.io.decode1.rs1
-    rs2_a := decode.io.decode1.rs2
-    rs1_b := decode.io.decode2.rs1
-    rs2_b := decode.io.decode2.rs2
-
-    //关于分支预测的寄存器
-    val E_bj             = RegInit(Bool())      // 执行阶段实际分支跳转信号
-    val E_bj_target      = RegInit(UInt(32.W))  // 执行阶段分支目标地址
-    val D_bj             = RegInit(Bool())      // 译码阶段预测分支信号
-    val D_bj_target      = RegInit(UInt(32.W))  // 预测分支目标地址
 
   
     // ===== I-Cache 接口连接 =====
@@ -109,11 +93,11 @@ class Top extends Module {
 
     // ===== RegFile 连接 =====(完成)
     //与ID相关
-    regFile.io.ra1_a:=rs1_a
-    regFile.io.ra1_b:=rs1_b
+    regFile.io.ra1_a:=decode.io.decode1.rs1
+    regFile.io.ra1_b:=decode.io.decode2.rs1
     
-    regFile.io.ra2_a:=rs2_a
-    regFile.io.ra2_b:=rs2_b
+    regFile.io.ra2_a:=decode.io.decode1.rs2
+    regFile.io.ra2_b:=decode.io.decode2.rs2
     //与WRITE相关
     regFile.io.wen1:=mem_wb.io.W_master_reg_wen
     regFile.io.wa1:=mem_wb.io.W_master_reg_waddr
