@@ -301,12 +301,5 @@ class Top extends Module {
     mem_wb.io.M_slave_reg_waddr:=ex_mem.io.E_rd2
     mem_wb.io.M_slave_reg_wdata:=mem.io.cpu.mem_rdata
 
-    //WB
-    regFile.io.wen1:=mem_wb.io.W_master_reg_wen
-    regFile.io.wa1:=mem_wb.io.W_master_reg_waddr
-    regFile.io.wd1:=mem_wb.io.W_master_reg_wdata
-    regFile.io.wen2:=mem_wb.io.W_slave_reg_wen
-    regFile.io.wa2:=mem_wb.io.W_slave_reg_waddr
-    regFile.io.wd2:=mem_wb.io.W_slave_reg_wdata
     
 }
