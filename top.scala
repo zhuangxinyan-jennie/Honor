@@ -123,12 +123,11 @@ class Top extends Module {
     regFile.io.wd2:=mem_wb.io.W_slave_reg_wdata
 
     // ===== CSR 连接 =====(完成)
-    val ex_to_csr_en=RegInit(Bool()) 
-    ex_to_csr_en:=ex.csr.writeEn
-    csr.io.csrrw_addr:=ex.csr.readAddr
+    csr.io.csrrw_valid := ex.csr.writeEn
+    csr.io.csrrw_addr:=ex.csr.writeAddr
     csr.io.csrrw_wdata:=ex.csr.writeData
-    csr.io.csrrw_wr_en:=ex_to_csr_en
-    csr.io.csrrw_rd_en:=ex_to_csr_en
+    csr.io.csrrw_wr_en:=ex.csr.writeEn
+    csr.io.csrrw_rd_en:=ex.csr.writeEn
 
 
     // ===== DualIssueDecode状态 =====（完成）
