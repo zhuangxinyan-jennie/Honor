@@ -16,7 +16,7 @@ class InstFifoIO extends Bundle {
   // val FetchWidth = 2 // Not strictly needed in IO if InstFifo defines it internally
 
   // Write interface from I-Mem (PCReg provides write_pc)
-  val write_pc    = Input(UInt(PAddrBits.W)) // Base PC for the write pc_effective_out
+  val write_pc      = Input(UInt(PAddrBits.W)) // Base PC for the write pc_effective_out
   val write_data1   = Input(UInt(InstrBits.W)) // First instruction from I-Mem
   val write_data2   = Input(UInt(InstrBits.W)) // Second instruction (if dual fetch)
 
@@ -38,7 +38,7 @@ class InstFifoIO extends Bundle {
   val i_stall = Input(Bool()) // Stall from ID or later stages 来自CU的fifo_stall信号
 
   // Flush command interface
-  val flush_command_in            = Input(Bool()) // CU的flush
+  val flush_command_in          = Input(Bool()) // CU的flush
   val flush_due_to_ID_predict_taken = Input(Bool()) // BP预测的跳转与否的结果
   val flush_due_to_EX_mispredict    = Input(Bool()) // EX判断是否BP预测错误，与CU和pcreg的输入都是一样的
 }
@@ -64,7 +64,7 @@ class InstFifo extends Module {
 
   // --- Intermediate Wires for Next State Calculation ---
   val next_write_ptr = WireDefault(write_ptr)
-  val next_read_ptr  = WireDefault(read_ptr)
+  val next_read_ptr  = WireDefault(read_ptr) // Defaults to current read_ptr
   val next_count_intermediate = WireDefault(count) // Intermediate count after writes, before reads
 
   val lines_next_valid = Wire(Vec(FifoDepth, Bool()))
@@ -72,16 +72,14 @@ class InstFifo extends Module {
 
   // --- Flush Decision ---
   val actual_perform_full_flush = io.flush_command_in && io.flush_due_to_EX_mispredict
-  val actual_perform_partial_flush = io.flush_command_in && io.flush_due_to_ID_predict_taken &&!io.flush_due_to_EX_mispredict
-  val perform_any_flush = actual_perform_full_flush |
-| actual_perform_partial_flush
+  val actual_perform_partial_flush = io.flush_command_in && io.flush_due_to_ID_predict_taken && !io.flush_due_to_EX_mispredict
+  val perform_any_flush = actual_perform_full_flush || actual_perform_partial_flush
 
   // --- Write Logic (Normal Operation - No explicit write_en; based on FIFO space and FetchWidth) ---
   // These pcreg_attempts_fetch signals are for NORMAL operation write.
   // During flush, the write logic is different.
-  val pcreg_attempts_fetch_two_normal = FetchWidth > 1 &&!io.full &&!io.almost_full
-  val pcreg_attempts_fetch_one_normal =!io.full && ((FetchWidth > 1 && io.almost_full) |
-| FetchWidth == 1)
+  val pcreg_attempts_fetch_two_normal = FetchWidth > 1 && !io.full && !io.almost_full
+  val pcreg_attempts_fetch_one_normal = !io.full && ((FetchWidth > 1 && io.almost_full) || FetchWidth == 1)
   var num_actually_written_normal = 0.U(log2Ceil(FetchWidth + 1).W)
 
 
@@ -120,21 +118,22 @@ class InstFifo extends Module {
   val can_read_1 = count > 0.U && lines(read_ptr).valid // Based on count *before* current cycle's writes
   val can_read_2 = if (FetchWidth > 1) (count > 1.U && lines(read_ptr + 1.U).valid && can_read_1) else false.B
 
-  when(!io.i_stall) {
+  when(!io.i_stall) { // If not stalled, attempt to read
     when(io.read_en1 && can_read_1) {
       lines_next_valid(read_ptr) := false.B // This will be overridden by flush logic if flush occurs
       num_actually_read := 1.U
-      next_read_ptr := read_ptr + 1.U
+      next_read_ptr := read_ptr + 1.U // Advance read_ptr if read occurs
 
       if (FetchWidth > 1) {
         when(io.read_en2 && can_read_2) {
           lines_next_valid(read_ptr + 1.U) := false.B // Overridden by flush if flush
           num_actually_read := 2.U
-          next_read_ptr := read_ptr + 2.U
+          next_read_ptr := read_ptr + 2.U // Advance read_ptr further for second read
         }
       }
     }
   }
+  // If io.i_stall is true, num_actually_read remains 0 and next_read_ptr remains read_ptr (due to WireDefault)
   val final_next_count = next_count_intermediate - num_actually_read
 
 
@@ -157,6 +156,7 @@ class InstFifo extends Module {
     when(actual_perform_partial_flush) {
       // BI was read in Cycle 0 by normal read logic (if read_en was asserted).
       // `next_read_ptr` (calculated by read logic above) reflects BI being read and pointer advanced.
+      // If stalled, next_read_ptr would be the current read_ptr.
       rptr_after_flush_decision := next_read_ptr
       wptr_after_flush_decision := next_read_ptr // New writes start here
     }.otherwise { // actual_perform_full_flush
@@ -181,6 +181,12 @@ class InstFifo extends Module {
       num_written_during_flush := 1.U
 
       if (FetchWidth >= 2) {
+        // Ensure not writing past FIFO depth if base_wptr is FifoDepth-1
+        // This check is implicitly handled by circular buffer addressing if pointers are correct.
+        // However, direct indexing like base_wptr + 1.U needs care if base_wptr can be FifoDepth-1
+        // and FetchWidth is 2. The pointer arithmetic handles wrap-around for Regs,
+        // but direct Vec access needs consideration if not careful.
+        // Assuming FifoDepth is power of 2, ptr + 1.U wraps.
         lines(base_wptr_for_flush_write + 1.U).addr := io.write_pc + InstrBytes.U
         lines(base_wptr_for_flush_write + 1.U).data := io.write_data2
         lines(base_wptr_for_flush_write + 1.U).valid := true.B
@@ -194,7 +200,7 @@ class InstFifo extends Module {
 
   }.otherwise { // Normal operation (no flush)
     write_ptr := next_write_ptr // Calculated by normal write logic
-    read_ptr  := next_read_ptr  // Calculated by normal read logic
+    read_ptr  := next_read_ptr  // Calculated by normal read logic (will be current read_ptr if stalled)
     count     := final_next_count // Calculated by normal write/read logic
 
     // For normal operations, update valid bits based on lines_next_valid
