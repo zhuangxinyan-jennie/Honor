@@ -101,16 +101,9 @@ class Top extends Module {
     cu.io.ex_branch_mispredict_detected_i := ex.io.cu.ex_branch_mispredict_detected_i
 
 
-    val idex_is_load=RegInit(Bool())
-    idex_is_load:=id_ex.io.E_master_ctrl_sign.mem_read || id_ex.io.E_master_ctrl_sign.mem_write
-    cu.io.cu_idex_master_is_load_i:=idex_is_load
-    val is_master_in_ex_i=RegInit(Bool())
-    is_master_in_ex_i:=!(id_ex.io.E_master_ctrl_sign.inst_type===0.U)
-    cu.io.is_master_path_active_in_ex_i:=is_master_in_ex_i
-    val is_slaver_in_ex_i=RegInit(Bool())
-    is_slaver_in_ex_i:=!(id_ex.io.E_slave_ctrl_sign.inst_type===0.U)
-    cu.io.ex_slave_path_data_ready_i:=is_slaver_in_ex_i
-
+    cu.io.cu_idex_master_is_load_i:= id_ex.io.E_master_ctrl_sign.mem_read || id_ex.io.E_master_ctrl_sign.mem_write
+    cu.io.is_master_path_active_in_ex_i:=!(id_ex.io.E_master_ctrl_sign.inst_type===0.U)
+    cu.io.ex_slave_path_data_ready_i:=!(id_ex.io.E_slave_ctrl_sign.inst_type===0.U)
     
 
 
@@ -227,6 +220,7 @@ class Top extends Module {
     id_ex.io.D_slave_ctrl_sign.pc_out:=decode.io.decode2.pc_out
 
     id_ex.io.ena:=cu.io.cu_idex_stall_o
+    id_ex.io.clear := false.B
 
     // ===== EX ===== //(与ID相关的基本完成)
     //与ID相关
@@ -285,7 +279,7 @@ class Top extends Module {
 
     // ===== EX -> MEM 连接 =====
     //master通道输入
-    ex_mem.io.ena:=true.B
+    ex_mem.io.ena:=cu.io.cu_exmem_stall_o
     ex_mem.io.E_master_ctrl_sign.mem_en:=ex.io.mem1.reqValid 
     ex_mem.io.E_master_ctrl_sign.mem_write:=ex.io.mem1.reqWrite
     ex_mem.io.E_master_ctrl_sign.mem_type:=ex.io.mem1.reqWidth
