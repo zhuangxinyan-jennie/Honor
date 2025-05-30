@@ -16,31 +16,31 @@ class InstFifoIO extends Bundle {
   // val FetchWidth = 2 // Not strictly needed in IO if InstFifo defines it internally
 
   // Write interface from I-Mem (PCReg provides write_pc)
-  val write_pc    = Input(UInt(PAddrBits.W)) // Base PC for the write
+  val write_pc    = Input(UInt(PAddrBits.W)) // Base PC for the write pc_effective_out
   val write_data1   = Input(UInt(InstrBits.W)) // First instruction from I-Mem
   val write_data2   = Input(UInt(InstrBits.W)) // Second instruction (if dual fetch)
 
   // Read interface to ID stage
-  val read_en1      = Input(Bool()) // ID requests to read first instruction
-  val read_en2      = Input(Bool()) // ID requests to read second instruction
+  val read_en1      = Input(Bool()) // ID requests to read first instruction，没有就置为true
+  val read_en2      = Input(Bool()) // ID requests to read second instruction，与slave_ena连接
   val read_data1    = Output(UInt(InstrBits.W))
   val read_address1 = Output(UInt(PAddrBits.W))
   val read_data2    = Output(UInt(InstrBits.W))
   val read_address2 = Output(UInt(PAddrBits.W))
 
   // Status signals
-  val full          = Output(Bool())
+  val full          = Output(Bool()) // 前两个是给pcreg的，后两个是给id的
   val almost_full   = Output(Bool())
   val empty         = Output(Bool())
   val almost_empty  = Output(Bool())
 
   // Pipeline stall signal
-  val i_stall = Input(Bool()) // Stall from ID or later stages
+  val i_stall = Input(Bool()) // Stall from ID or later stages 来自CU的fifo_stall信号
 
   // Flush command interface
-  val flush_command_in            = Input(Bool())
-  val flush_due_to_ID_predict_taken = Input(Bool())
-  val flush_due_to_EX_mispredict    = Input(Bool())
+  val flush_command_in            = Input(Bool()) // CU的flush
+  val flush_due_to_ID_predict_taken = Input(Bool()) // BP预测的跳转与否的结果
+  val flush_due_to_EX_mispredict    = Input(Bool()) // EX判断是否BP预测错误，与CU和pcreg的输入都是一样的
 }
 
 class InstFifo extends Module {
