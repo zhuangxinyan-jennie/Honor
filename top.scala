@@ -68,8 +68,7 @@ class Top extends Module {
    
     instFifo.io.write_data1:=io.inst_data1
     instFifo.io.write_data2:=io.inst_data2
-    instFifo.io.write_address1:=pcReg.io.pc_curr
-    instFifo.io.write_address2:=pcReg.io.pc_curr + 4.U
+    instFifo.io.write_address1:=pcReg.io.pc_effective_out
   
 
 
@@ -84,10 +83,12 @@ class Top extends Module {
     // ===== PCReg 控制信号 =====
     pcReg.io.F_fifo_full:=instFifo.io.full
     pcReg.io.F_fifo_almost_full:=instFifo.io.almost_full
-    //pcReg.io.D_bj:=control.io.E_bj
-    //pcReg.io.D_bj_target:=0.U // 可根据实际跳转目标替换
-    pcReg.io.E_bj:=bp.io.predTakeD
-    pcReg.io.E_bj_target:=bp.io.branchTargetD
+    pcReg.io.D_bj:=bp.io.predTakeD
+    pcReg.io.D_bj_target:=bp.io.branchTargetD
+    pcReg.io.EX_mispredict_resolved:= ex.io.cu.ex_branch_mispredict_detected_i
+    pcReg.io.EX_pc_of_mispredicted_branch:= ex.io.pc1Out
+    pcReg.io.EX_actual_branch_target:= ex.io.branchTarget1
+    pcReg.io.EX_branch_actually_taken:= ex.io.branch1
     
      // ===== 控制单元输入输出 =====(完成)
     cu.io.ex_master_path_data_ready_i := ex.io.cu.ex_master_path_data_ready_i
