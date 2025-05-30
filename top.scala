@@ -62,14 +62,17 @@ class Top extends Module {
 
   
     // ===== I-Cache 接口连接 =====
-    io.read_push:=decode.io.fifo_push
-    instFifo.io.fifo_rst:=cu.io.cu_ififo_flush_o 
-    instFifo.io.i_stall:=cu_ififo_rd_stall_o
+    instFifo.io.flush_command_in:=cu.io.cu_ififo_flush_o 
+    instFifo.io.i_stall:=cu.io.cu_ififo_rd_stall_o
    
     instFifo.io.write_data1:=io.inst_data1
     instFifo.io.write_data2:=io.inst_data2
-    instFifo.io.write_address1:=pcReg.io.pc_effective_out
-  
+    instFifo.io.write_pc:=pcReg.io.pc_effective_out
+
+    instFifo.io.read_en1 := true.B
+    instFifo.io.read_en2 := !decode.io.fifo_push
+    instFifo.io.flush_due_to_ID_predict_taken := bp.io.predTakeD
+    instFifo.io.flush_due_to_EX_mispredict := ex.io.cu.ex_branch_mispredict_detected_i
 
 
     // ===== D-Cache 接口连接 =====
@@ -136,12 +139,12 @@ class Top extends Module {
 
 
     // ===== DualIssueDecode状态 =====（完成）
-    decode.io.inst1:=instFifo.read_data1
-    decode.io.inst2:=instFifo.read_data2
-    decode.io.fifo_empty:=instFifo.empty
-    decode.io.fifo_almost_empty:=instFifo.almost_empty
-    decode.io.pc1:=instinstFifo.read_address1
-    decode.io.pc2:=instinstFifo.read_address2
+    decode.io.inst1:=instFifo.io.read_data1
+    decode.io.inst2:=instFifo.io.read_data2
+    decode.io.fifo_empty:=instFifo.io.empty
+    decode.io.fifo_almost_empty:=instFifo.io.almost_empty
+    decode.io.pc1:=instFifo.io.read_address1
+    decode.io.pc2:=instFifo.io.read_address2
     decode.io.reg1_rs1_data:=regFile.io.rd1_a
     decode.io.reg1_rs2_data:=regFile.io.rd1_b
     decode.io.reg2_rs1_data:=regFile.io.rd2_a
