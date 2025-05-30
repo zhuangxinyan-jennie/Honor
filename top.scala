@@ -60,12 +60,11 @@ class Top extends Module {
 
 
     // ===== D-Cache 接口连接 =====
-    mem.io.cpu.mem_rdata:=io.mem_rdata
-    mem.io.cpu.mem_ready:=io.mem_ready
-    io.mem_en:=mem.io.cpu.mem_en
-    io.mem_op:=ex_mem.io.M_mem_op
-    io.mem_wdata:=mem.io.cpu.wdata
-    io.mem_addr:=mem.io.cpu.addr
+    io.sram_en:=mem.io.sram.en
+    io.sram_funct3:=mem.io.sram.funct3
+    io.sram_addr:=mem.io.sram.addr
+    io.sram_wdata:=mem.io.sram.wdata
+    mem.io.sram.rdata:=io.sram_rdata
 
     // ===== PCReg 控制信号 =====
     pcReg.io.F_fifo_full:=instFifo.io.full
