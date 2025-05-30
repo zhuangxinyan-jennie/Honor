@@ -4,18 +4,18 @@ import chisel3.util._
 class PCRegIO extends Bundle {
   val PAddrBits = 32
 
-  val EX_mispredict_resolved       = Input(Bool())
-  val EX_pc_of_mispredicted_branch = Input(UInt(PAddrBits.W))
-  val EX_actual_branch_target      = Input(UInt(PAddrBits.W))
-  val EX_branch_actually_taken     = Input(Bool())
+  val EX_mispredict_resolved       = Input(Bool()) // ex_branch_mispredict_detected_i ，与CU连接的那个信号相同 
+  val EX_pc_of_mispredicted_branch = Input(UInt(PAddrBits.W)) // ex的pc1Out
+  val EX_actual_branch_target      = Input(UInt(PAddrBits.W)) // ex的branchTarget1
+  val EX_branch_actually_taken     = Input(Bool()) // ex输出是否跳转branch1
 
-  val D_bj         = Input(Bool())
-  val D_bj_target  = Input(UInt(PAddrBits.W))
+  val D_bj         = Input(Bool()) // BP输出是否跳转
+  val D_bj_target  = Input(UInt(PAddrBits.W)) // BP输出的跳转位置
 
-  val F_fifo_full         = Input(Bool())
+  val F_fifo_full         = Input(Bool()) // 与fifo对应端口连接
   val F_fifo_almost_full  = Input(Bool())
 
-  val pc_effective_out = Output(UInt(PAddrBits.W))
+  val pc_effective_out = Output(UInt(PAddrBits.W)) // 当前pc，下一条为pc_effective_out+4.U
 }
 
 class PCReg extends Module {
