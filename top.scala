@@ -247,8 +247,8 @@ class Top extends Module {
     //与BTB相关
     
     //与mem相关
-    ex.io.mem1_rspValid:=mem.io.cpu.mem_ready
-    ex.io.mem2_rspData:=mem.io.cpu.mem_rdata
+    ex.io.mem1_rspValid:=mem.io.cpu.mem_bypass_valid
+    ex.io.mem2_rspData:=mem.io.cpu.mem_bypass_data
 
     //=======BP==========
     bp.io.enaD:=decode.io.decode_branch_valid
@@ -288,18 +288,19 @@ class Top extends Module {
 
     // ==== MEM =====//
     mem.io.cpu.mem_en:=ex_mem.io.M_master_ctrl_sign.mem_en
-    mem.io.cpu.mem_op:=ex_mem.io.M_master_ctrl_sign.mem_type
+    mem.io.cpu.mem_type:=ex_mem.io.M_master_ctrl_sign.mem_type
     mem.io.cpu.mem_wdata:=ex_mem.io.M_master_ctrl_sign.mem_wdata
     mem.io.cpu.mem_addr:=ex_mem.io.M_master_ctrl_sign.mem_addr
-    
+    mem.io.cpu.mem_unsigned:=ex_mem.io.M_master_ctrl_sign.mem_unsigned
+    mem.io.cpu.mem_write:=ex_mem.io.M_master_ctrl_sign.mem_write
+
 
    // ===== MEM -> MEM_WB 连接 =====
-    mem_wb.io.M_master_reg_wen:=ex_mem.io.E_valid1
-    mem_wb.io.M_master_reg_waddr:=ex_mem.io.E_rd1
-    mem_wb.io.M_master_reg_wdata:=mem.io.cpu.mem_rdata
-    mem_wb.io.M_slave_reg_wen:=ex_mem.io.E_valid2
-    mem_wb.io.M_slave_reg_waddr:=ex_mem.io.E_rd2
-    mem_wb.io.M_slave_reg_wdata:=mem.io.cpu.mem_rdata
+    mem_wb.io.M_master_reg_wen:=decode1.io.mem_read ? mem.io.cpu.mem_ready : ex_mem.io.W_valid1
+    mem_wb.io.M_master_reg_waddr:=ex_mem.io.W_rd1
+    mem_wb.io.M_master_reg_wdata:=decode1.io.mem_read ? mem.io.cpu.mem_rdata : ex_mem.io.W_result1
+    mem_wb.io.M_slave_reg_wen:=ex_mem.io.W_valid2
+    mem_wb.io.M_slave_reg_waddr:=ex_mem.io.W_rd2
+    mem_wb.io.M_slave_reg_wdata:= ex_mem.io.W_result2
 
-    
 }
