@@ -5,7 +5,7 @@ import chisel3.util._
 import parse.BaseDecode
 import name._
 import issue_ctrl._
-import name.ALU.ALU_COPY
+import name.ALU.ALU_JAL12
 import name.InstType.{I_TYPE, J_TYPE}
 
 import scala.language.reflectiveCalls
@@ -93,8 +93,8 @@ class DualIssueDecode extends Module {
   issue_ctrl.io.D_master_memtoReg := decode1.io.mem_read //是否是load指令
   issue_ctrl.io.D_master_is_branch := decode1.io.inst_type === 5.U  // B_TYPE
 //  issue_ctrl.io.D_master_is_ja := decode1.io.inst_type === 1.U || (decode1.io.inst_type === 3.U && decode1.io.opcode === "b1100111".U)  // JAL或JALR
-  issue_ctrl.io.D_master_is_ja := decode1.io.alu_op === ALU_COPY &&
-    (decode1.io.inst_type === J_TYPE || decode1.io.inst_type === I_TYPE)
+  issue_ctrl.io.D_master_is_ja := decode1.io.alu_op === ALU_JAL12 
+    // (decode1.io.inst_type === J_TYPE || decode1.io.inst_type === I_TYPE)
   issue_ctrl.io.D_master_is_csr := decode1.io.inst_type === 8.U  // CSR_TYPE
   // issue_ctrl.io.D_master_is_fence12 := decode1.io.inst_type === 7.U  // FENCE_TYPE
   issue_ctrl.io.D_master_mem_write := decode1.io.mem_write //是否是store指令
@@ -168,5 +168,5 @@ class DualIssueDecode extends Module {
   io.decode2.ex_rs2_data := Mux(io.slave_ena, decode2.io.ex_rs2_data, 0.U)
   
   // 译码阶段分支指令有效信号
-  io.decode_branch_valid := (decode1.io.inst_type === 5.U) || (decode1.io.alu_op === ALU_COPY && (decode1.io.inst_type === J_TYPE || decode1.io.inst_type === I_TYPE))
+  io.decode_branch_valid := (decode1.io.inst_type === 5.U) || (decode1.io.alu_op === ALU_JAL12）
 }
