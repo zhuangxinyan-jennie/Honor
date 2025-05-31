@@ -168,5 +168,5 @@ class DualIssueDecode extends Module {
   io.decode2.ex_rs2_data := Mux(io.slave_ena, decode2.io.ex_rs2_data, 0.U)
   
   // 译码阶段分支指令有效信号
-  io.decode_branch_valid := (decode1.io.inst_type === 5.U) || (decode1.io.alu_op === ALU_JAL12）
+  io.decode_branch_valid := (decode1.io.inst_type === 5.U) || (decode1.io.alu_op === ALU_JAL12)
 }
