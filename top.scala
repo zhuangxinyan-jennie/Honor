@@ -4,7 +4,8 @@ import chisel3.util._
 
 class TopIO extends Bundle{
     // Instruction memory interface (I-Cache)
-    val inst_addr=Output(UInt(32.W))
+    val inst_addr1=Output(UInt(32.W))
+    val inst_addr2=Output(UInt(32.W))
     val inst_data1=Input(UInt(32.W))
     val inst_data2=Input(UInt(32.W))
   
@@ -75,6 +76,9 @@ class Top extends Module {
     pcReg.io.EX_pc_of_mispredicted_branch:= ex.io.pc1Out
     pcReg.io.EX_actual_branch_target:= ex.io.branchTarget1
     pcReg.io.EX_branch_actually_taken:= ex.io.branch1
+
+    io.inst_addr1 := pcReg.io.pc_effective_out
+    io.inst_addr2 := pcReg.io.pc_effective_out + 4.U
     
      // ===== 控制单元输入输出 =====(完成)
     cu.io.ex_master_path_data_ready_i := ex.io.cu.ex_master_path_data_ready_i
