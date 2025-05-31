@@ -156,7 +156,7 @@ class Top extends Module {
     forward.io.exmem_master_alu_rd_addr := ex_mem.W_rd1
     forward.io.exmem_master_alu_data    := ex_mem.result1
 
-    forward.io.exmem_slave_alu_valid   :=!ex_mem.io.M_slave_ctrl_sign.mem_write && !ex_mem.io.M_slave_ctrl_sign.mem_read && !(ex_mem.W_rd2===0.U)
+    forward.io.exmem_slave_alu_valid   := !(ex_mem.W_rd2===0.U)
     forward.io.exmem_slave_alu_rd_addr := ex_mem.W_rd2
     forward.io.exmem_slave_alu_data    := ex_mem.result2
 
