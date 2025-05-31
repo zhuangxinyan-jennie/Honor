@@ -22,6 +22,8 @@ class id_ex_ctrl_sign extends Bundle {
 }
 
 class id_ex extends Module {
+  private val numOperandsFixed: Int = 2
+
   val io = IO(new Bundle {
     // 控制信号
     val clear = Input(Bool())
@@ -29,20 +31,20 @@ class id_ex extends Module {
     
     // Master通道输入
     val D_master_ctrl_sign = Input(new id_ex_ctrl_sign())
-    val final_master_rs_data = Input(Vec(numOperandsFixed, UInt(32.W)))
+    val F_final_master_rs_data = Input(Vec(numOperandsFixed, UInt(32.W)))
     
     // Slave通道输入
     val D_slave_ctrl_sign = Input(new id_ex_ctrl_sign())
-    val final_slave_rs_data  = Input(Vec(numOperandsFixed, UInt(32.W)))
+    val F_final_slave_rs_data  = Input(Vec(numOperandsFixed, UInt(32.W)))
     val D_slave_ena = Input(Bool())
 
     // Master通道输出
     val E_master_ctrl_sign = Output(new id_ex_ctrl_sign())
-    val final_master_rs_data = Output(Vec(numOperandsFixed, UInt(32.W)))
+    val E_final_master_rs_data = Output(Vec(numOperandsFixed, UInt(32.W)))
 
     // Slave通道输出
     val E_slave_ctrl_sign = Output(new id_ex_ctrl_sign())
-    val final_slave_rs_data  = Output(Vec(numOperandsFixed, UInt(32.W)))
+    val E_final_slave_rs_data  = Output(Vec(numOperandsFixed, UInt(32.W)))
     val E_slave_ena = Output(Bool())
   })
   
@@ -66,7 +68,7 @@ class id_ex extends Module {
     masterReg := 0.U.asTypeOf(new MasterRegBundle)
   }.elsewhen(io.ena) {
     masterReg.ctrl_sign := io.D_master_ctrl_sign
-    masterReg.rs_data := io.final_master_rs_data
+    masterReg.rs_data := io.F_final_master_rs_data
   }
 
   // Slave通道寄存器逻辑
@@ -74,15 +76,15 @@ class id_ex extends Module {
     slaveReg := 0.U.asTypeOf(new SlaveRegBundle)
   }.elsewhen(io.ena) {
     slaveReg.ctrl_sign := io.D_slave_ctrl_sign
-    slaveReg.rs_data := io.final_slave_rs_data
+    slaveReg.rs_data := io.F_final_slave_rs_data
     slaveReg.ena := io.D_slave_ena
   }
 
   // 连接寄存器输出到IO
   io.E_master_ctrl_sign := masterReg.ctrl_sign
-  io.final_master_rs_data := masterReg.rs_data
+  io.E_final_master_rs_data := masterReg.rs_data
 
   io.E_slave_ctrl_sign := slaveReg.ctrl_sign
-  io.final_slave_rs_data := slaveReg.rs_data
+  io.E_final_slave_rs_data := slaveReg.rs_data
   io.E_slave_ena := slaveReg.ena
 }
