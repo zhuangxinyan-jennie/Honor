@@ -35,7 +35,7 @@ class InstFifoIO extends Bundle {
   val i_stall = Input(Bool()) // Stall from ID or later stages 来自CU的fifo_stall信号
 
   // Flush command interface
-  val flush_command_in          = Input(Bool()) // CU的flush
+  val flush_command_in            = Input(Bool()) // CU的flush
   val flush_due_to_ID_predict_taken = Input(Bool()) // BP预测的跳转与否的结果
   val flush_due_to_EX_mispredict    = Input(Bool()) // EX判断是否BP预测错误，与CU和pcreg的输入都是一样的
 }
@@ -59,27 +59,29 @@ class InstFifo extends Module {
   val read_ptr      = RegInit(0.U(FifoPtrBits.W))
   val count         = RegInit(0.U(FifoCountBits.W))
 
-  val next_write_ptr_candidate = WireDefault(write_ptr)
-  val next_read_ptr_candidate  = WireDefault(read_ptr)
-  val next_count_candidate     = WireDefault(count)
+  val next_write_ptr_candidate   = WireDefault(write_ptr)
+  val next_read_ptr_candidate    = WireDefault(read_ptr)
+  val next_count_candidate       = WireDefault(count)
   val next_lines_valid_candidate = WireInit(lines_valid)
 
-  val ex_flush_c0_triggered   = io.flush_command_in && io.flush_due_to_EX_mispredict
-  val id_flush_triggered      = io.flush_command_in && io.flush_due_to_ID_predict_taken && !ex_flush_c0_triggered
+  val ex_flush_c0_triggered     = io.flush_command_in && io.flush_due_to_EX_mispredict
+  val id_flush_triggered        = io.flush_command_in && io.flush_due_to_ID_predict_taken && !ex_flush_c0_triggered
 
-  val ex_flush_c1_active          = RegNext(ex_flush_c0_triggered, false.B)
+  val ex_flush_c1_active            = RegNext(ex_flush_c0_triggered, false.B)
   val was_full_at_ex_flush_c0_start = RegNext(io.full && ex_flush_c0_triggered, false.B)
 
   val hold_normal_writes_condition = io.i_stall && (io.flush_due_to_ID_predict_taken || io.flush_due_to_EX_mispredict)
 
-  val write_ptr_after_normal_write = WireDefault(write_ptr)
+  val write_ptr_after_normal_write          = WireDefault(write_ptr)
   val count_after_normal_write_intermediate = WireDefault(count)
-  val lines_valid_after_normal_write = WireInit(lines_valid)
-  var num_actually_written_normal = 0.U(log2Ceil(FetchWidth + 1).W)
+  val lines_valid_after_normal_write        = WireInit(lines_valid)
+  var num_actually_written_normal           = 0.U(log2Ceil(FetchWidth + 1).W)
 
   when(!hold_normal_writes_condition) {
-    val pcreg_attempts_fetch_two = FetchWidth > 1 && !io.full && !io.almost_full
-    val pcreg_attempts_fetch_one = !io.full && ((FetchWidth > 1 && io.almost_full) || FetchWidth == 1)
+    // Corrected: Convert Scala Boolean (FetchWidth > 1) to Chisel Bool (.B)
+    val pcreg_attempts_fetch_two = (FetchWidth > 1).B && !io.full && !io.almost_full
+    // Corrected: Convert Scala Boolean (FetchWidth > 1) and (FetchWidth == 1) to Chisel Bool (.B)
+    val pcreg_attempts_fetch_one = !io.full && (((FetchWidth > 1).B && io.almost_full) || (FetchWidth == 1).B)
 
     when(pcreg_attempts_fetch_two) {
       when(count <= (FifoDepth - 2).U) {
@@ -112,13 +114,15 @@ class InstFifo extends Module {
   }
   count_after_normal_write_intermediate := count + num_actually_written_normal
 
-  val read_ptr_after_normal_read = WireDefault(read_ptr)
-  val count_after_normal_read_write = WireDefault(count_after_normal_write_intermediate)
+  val read_ptr_after_normal_read      = WireDefault(read_ptr)
+  val count_after_normal_read_write   = WireDefault(count_after_normal_write_intermediate)
   val lines_valid_after_normal_read_write = WireInit(lines_valid_after_normal_write)
-  var num_actually_read_normal = 0.U(log2Ceil(FetchWidth + 1).W)
+  var num_actually_read_normal        = 0.U(log2Ceil(FetchWidth + 1).W)
 
   val current_can_read_1 = count > 0.U && lines_valid(read_ptr)
-  val current_can_read_2 = if (FetchWidth > 1) (count > 1.U && lines_valid(read_ptr + 1.U) && current_can_read_1) else false.B
+  // Corrected: Convert Scala Boolean (FetchWidth > 1) to Chisel Bool (.B)
+  val current_can_read_2 = (FetchWidth > 1).B && (count > 1.U && lines_valid(read_ptr + 1.U) && current_can_read_1)
+
 
   when(!io.i_stall) {
     when(io.read_en1 && current_can_read_1) {
@@ -126,7 +130,8 @@ class InstFifo extends Module {
       num_actually_read_normal := 1.U
       read_ptr_after_normal_read := read_ptr + 1.U
 
-      if (FetchWidth > 1) {
+      // Ensure the `if` block for FetchWidth is only generated if `FetchWidth > 1`
+      if (FetchWidth > 1) { // This `if` is a Scala `if`, not Chisel `when`
         when(io.read_en2 && current_can_read_2) {
           lines_valid_after_normal_read_write(read_ptr + 1.U) := false.B
           num_actually_read_normal := 2.U
@@ -137,9 +142,9 @@ class InstFifo extends Module {
   }
   count_after_normal_read_write := count_after_normal_write_intermediate - num_actually_read_normal
 
-  next_write_ptr_candidate := write_ptr_after_normal_write
-  next_read_ptr_candidate  := read_ptr_after_normal_read
-  next_count_candidate     := count_after_normal_read_write
+  next_write_ptr_candidate   := write_ptr_after_normal_write
+  next_read_ptr_candidate    := read_ptr_after_normal_read
+  next_count_candidate       := count_after_normal_read_write
   next_lines_valid_candidate := lines_valid_after_normal_read_write
 
   when(reset.asBool) {
@@ -152,11 +157,12 @@ class InstFifo extends Module {
 
     when(was_full_at_ex_flush_c0_start) {
       temp_next_lines_valid.foreach(_ := false.B)
-      next_count_candidate     := 0.U
+      next_count_candidate   := 0.U
       next_write_ptr_candidate := next_read_ptr_candidate
     }.otherwise {
       for (i <- 0 until FifoDepth) {
-        val is_newly_written_in_c0 = (i.U === 0.U && count > 0.U) || (i.U === 1.U && count > 1.U && FetchWidth > 1)
+        // Corrected: Convert Scala Boolean (FetchWidth > 1) to Chisel Bool (.B)
+        val is_newly_written_in_c0 = (i.U === 0.U && count > 0.U) || ((i.U === 1.U).B && (count > 1.U).B && (FetchWidth > 1).B)
         when(!is_newly_written_in_c0) {
           temp_next_lines_valid(i) := false.B
         }
@@ -212,6 +218,7 @@ class InstFifo extends Module {
     next_read_ptr_candidate  := rptr_target
     next_count_candidate     := num_written_this_flush
   }.otherwise {
+    // No specific updates in this block, `next_*_candidate` signals retain their default values.
   }
 
   write_ptr   := next_write_ptr_candidate
@@ -219,8 +226,10 @@ class InstFifo extends Module {
   count       := next_count_candidate
   lines_valid := next_lines_valid_candidate
 
+  // Corrected: Ensure comparisons result in Chisel Bool if used in Chisel operations
   val out_can_read_1_normal = count > 0.U && lines_valid(read_ptr) && io.read_en1
-  val out_can_read_2_normal = if (FetchWidth > 1) (count > 1.U && lines_valid(read_ptr + 1.U) && out_can_read_1_normal && io.read_en2) else false.B
+  // Corrected: Convert Scala Boolean (FetchWidth > 1) to Chisel Bool (.B)
+  val out_can_read_2_normal = (FetchWidth > 1).B && (count > 1.U && lines_valid(read_ptr + 1.U) && out_can_read_1_normal && io.read_en2)
 
   val suppress_read_due_to_ex_flush_c0 = ex_flush_c0_triggered
 
@@ -230,6 +239,7 @@ class InstFifo extends Module {
   io.read_data1    := Mux(final_out_can_read_1, lines(read_ptr).data, 0.U)
   io.read_address1 := Mux(final_out_can_read_1, lines(read_ptr).addr, 0.U)
 
+  // This `if` block is a Scala `if`, so FetchWidth > 1 evaluates to a Scala Boolean, which is fine here.
   if (FetchWidth > 1) {
     io.read_data2    := Mux(final_out_can_read_2, lines(read_ptr + 1.U).data, 0.U)
     io.read_address2 := Mux(final_out_can_read_2, lines(read_ptr + 1.U).addr, 0.U)
@@ -239,7 +249,9 @@ class InstFifo extends Module {
   }
 
   io.empty        := count === 0.U
-  io.almost_empty := count === 1.U && FetchWidth > 1
+  // Corrected: Convert Scala Boolean (FetchWidth > 1) to Chisel Bool (.B)
+  io.almost_empty := (count === 1.U) && (FetchWidth > 1).B
   io.full         := count === FifoDepth.U
-  io.almost_full  := count === (FifoDepth - 1).U && FetchWidth > 1
+  // Corrected: Convert Scala Boolean (FetchWidth > 1) to Chisel Bool (.B)
+  io.almost_full  := (count === (FifoDepth - 1).U) && (FetchWidth > 1).B
 }
