@@ -248,6 +248,7 @@ class Top extends Module {
     ex.io.EXIn2.mem_unsigned=id_ex.io.E_slave_ctrl_sign.mem_unsigned
     ex.io.exception:=id_ex.io.E_slave_ctrl_sign.exception
     ex.io.pc_out:=id_ex.io.E_slave_ctrl_sign.pc_out
+    ex.io.slave_ena:=id_ex.io.E_slave_ena
     //与CSR相关
     ex.csr.readData:=csr.io.csrrw_rdata
     //与BTB相关
