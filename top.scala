@@ -299,9 +299,9 @@ class Top extends Module {
 
 
    // ===== MEM -> MEM_WB 连接 =====
-    mem_wb.io.M_master_reg_wen:=decode1.io.mem_read ? mem.io.cpu.mem_ready : ex_mem.io.W_valid1
+    mem_wb.io.M_master_reg_wen:=id_ex.io.E_master_ctrl_sign.mem_read ? mem.io.cpu.mem_ready : ex_mem.io.W_valid1
     mem_wb.io.M_master_reg_waddr:=ex_mem.io.W_rd1
-    mem_wb.io.M_master_reg_wdata:=decode1.io.mem_read ? mem.io.cpu.mem_rdata : ex_mem.io.W_result1
+    mem_wb.io.M_master_reg_wdata:=id_ex.io.E_master_ctrl_sign.mem_read ? mem.io.cpu.mem_rdata : ex_mem.io.W_result1
     mem_wb.io.M_slave_reg_wen:=ex_mem.io.W_valid2
     mem_wb.io.M_slave_reg_waddr:=ex_mem.io.W_rd2
     mem_wb.io.M_slave_reg_wdata:= ex_mem.io.W_result2
