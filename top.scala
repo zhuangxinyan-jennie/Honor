@@ -10,12 +10,11 @@ class TopIO extends Bundle{
     val inst_data2=Input(UInt(32.W))
   
     // Data memory interface (D-Cache)
-    val mem_en=Output(Bool())
-    val mem_op=Output(UInt(6.W))
-    val mem_wdata=Output(UInt(32.W))
-    val mem_addr=Output(UInt(32.W))
-    val mem_rdata=Input(UInt(32.W))
-    val mem_ready = Input(Bool())
+    val sram_en=Output(Bool())
+    val sram_funct3=Output(UInt(3.W))
+    val sram_wdata=Output(UInt(32.W))
+    val sram_addr=Output(UInt(32.W))
+    val sram_rdata=Input(UInt(32.W))
 }
 class Top extends Module {
     val io = IO(new TopIO)
