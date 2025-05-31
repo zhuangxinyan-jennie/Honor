@@ -3,8 +3,6 @@ import chisel3.util._
 
 class id_ex_ctrl_sign extends Bundle {
   val inst_type = UInt(4.W)
-  val rs1 = UInt(5.W)
-  val rs2 = UInt(5.W)
   val ex_rs1_data = UInt(32.W)
   val ex_rs2_data = UInt(32.W)
   val rd = UInt(5.W)

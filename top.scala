@@ -168,8 +168,6 @@ class Top extends Module {
     // ===== ID -> EX 连接 =====(基本完成  )
     
     id_ex.io.D_master_ctrl_sign.inst_type=decode.io.decode1.inst_type
-    id_ex.io.D_master_ctrl_sign.rs1:= decode.io.decode1.rs1
-    id_ex.io.D_master_ctrl_sign.rs2:= decode.io.decode1.rs2
     id_ex.io.D_master_ctrl_sign.ex_rs1_data:=decode.io.decode1.ex_rs1_data
     id_ex.io.D_master_ctrl_sign.ex_rs2_data:=decode.io.decode1.ex_rs2_data
     id_ex.io.D_master_ctrl_sign.rd:=decode.io.decode1.rd
@@ -188,8 +186,6 @@ class Top extends Module {
     id_ex.io.F_final_master_rs_data(1):=forward.io.final_master_rs_data(1)
 
     id_ex.io.D_slave_ctrl_sign.inst_type=decode.io.decode2.inst_type
-    id_ex.io.D_slave_ctrl_sign.rs1:= decode.io.decode2.rs1
-    id_ex.io.D_slave_ctrl_sign.rs2:= decode.io.decode2.rs2
     id_ex.io.D_slave_ctrl_sign.ex_rs1_data:=decode.io.decode2.ex_rs1_data
     id_ex.io.D_slave_ctrl_sign.ex_rs2_data:=decode.io.decode2.ex_rs2_data
     id_ex.io.D_slave_ctrl_sign.rd:=decode.io.decode2.rd
@@ -204,8 +200,8 @@ class Top extends Module {
     id_ex.io.D_slave_ctrl_sign.mem_unsigned:=decode.io.decode2.mem_unsigned
     id_ex.io.D_slave_ctrl_sign.exception:=decode.io.decode2.exception
     id_ex.io.D_slave_ctrl_sign.pc_out:=decode.io.decode2.pc_out
-    id_ex.io.E_final_slave_rs_data(0):=forward.io.final_slave_rs_data(0)
-    id_ex.io.E_final_slave_rs_data(1):=forward.io.final_slave_rs_data(1)
+    id_ex.io.F_final_slave_rs_data(0):=forward.io.final_slave_rs_data(0)
+    id_ex.io.F_final_slave_rs_data(1):=forward.io.final_slave_rs_data(1)
     id_ex.io.D_slave_ena:=decode.io.slave_ena
 
     id_ex.io.ena:=cu.io.cu_idex_stall_o
@@ -214,8 +210,8 @@ class Top extends Module {
     // ===== EX ===== //(与ID相关的基本完成)
     //与ID相关
     ex.io.EXIn1.inst_type:=id_ex.io.E_master_ctrl_sign.inst_type
-    ex.io.EXIn1.rs1:=id_ex.io.E_master_ctrl_sign.rs1
-    ex.io.EXIn1.rs2:=id_ex.io.E_master_ctrl_sign.rs2
+    ex.io.EXIn1.rs1:=id_ex.io.E_final_master_rs_data(0)
+    ex.io.EXIn1.rs2:=id_ex.io.E_final_master_rs_data(1)
     ex.io.EXIn1.ex_rs1_data:=id_ex.io.E_master_ctrl_sign.ex_rs1_data
     ex.io.EXIn1.ex_rs2_data:=id_ex.io.E_master_ctrl_sign.ex_rs2_data
     ex.io.EXIn1.rd:=id_ex.io.E_master_ctrl_sign.rd
@@ -232,8 +228,8 @@ class Top extends Module {
     ex.io.pc_out:=id_ex.io.E_master_ctrl_sign.pc_out
     
     ex.io.EXIn2.inst_type:=id_ex.io.E_slave_ctrl_sign.inst_type
-    ex.io.EXIn2.rs1:=id_ex.io.E_slave_ctrl_sign.rs1
-    ex.io.EXIn2.rs2:=id_ex.io.E_slave_ctrl_sign.rs2
+    ex.io.EXIn2.rs1:=id_ex.io.E_final_slave_rs_data(0)
+    ex.io.EXIn2.rs2:=id_ex.io.E_final_slave_rs_data(1)
     ex.io.EXIn2.ex_rs1_data:=id_ex.io.E_slave_ctrl_sign.ex_rs1_data
     ex.io.EXIn2.ex_rs2_data:=id_ex.io.E_slave_ctrl_sign.ex_rs2_data
     ex.io.EXIn2.rd:=id_ex.io.E_slave_ctrl_sign.rd
