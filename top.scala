@@ -90,7 +90,6 @@ class Top extends Module {
 
     cu.io.cu_idex_master_is_load_i:= id_ex.io.E_master_ctrl_sign.mem_read || id_ex.io.E_master_ctrl_sign.mem_write
     cu.io.is_master_path_active_in_ex_i:=!(id_ex.io.E_master_ctrl_sign.inst_type===0.U)
-    cu.io.ex_slave_path_data_ready_i:=!(id_ex.io.E_slave_ctrl_sign.inst_type===0.U)
     
 
 
