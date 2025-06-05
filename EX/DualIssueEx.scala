@@ -175,8 +175,8 @@ class DualIssueEx extends Module {
   val io = IO(new DualIssueExIO)
 
   // Default outputs
-  io.pc1Out :=0.U
-  io.pc2Out :=0.U
+  io.pc1Out := 0.U
+  io.pc2Out := 0.U
   io.rd1 := 0.U
   io.rd2 := 0.U
   io.result1 := 0.U
@@ -223,7 +223,7 @@ class DualIssueEx extends Module {
   io.mem2.memUnsigned := false.B
 
   // CU
-  io.cu.ex_branch_mispredict_detected_i := true.B
+  io.cu.ex_branch_mispredict_detected_i := false.B
   io.cu.ex_master_path_data_ready_i := false.B
   io.cu.ex_slave_path_data_ready_i := false.B
 
@@ -340,6 +340,10 @@ class DualIssueEx extends Module {
   // Output register destinations
   io.rd1 := io.ExIn1.rd
   io.rd2 := io.ExIn2.rd
+
+  // Output PC: directly connect
+  io.pc1Out := io.ExIn1.pc_out
+  io.pc2Out := io.ExIn2.pc_out
 
   // Inst 1
   val op1_1 = MuxLookup(io.ExIn1.alu_op1, 0.U, Seq(
@@ -559,37 +563,52 @@ class DualIssueEx extends Module {
   bpFifo.io.enq.valid := io.bpPredict.valid
   bpFifo.io.enq.bits := io.bpPredict.bits
   bpFifo.io.deq.ready := false.B
+
+  // Branch verification logic
   val verifyTarget = WireDefault(false.B)
+  val mispredict = WireDefault(false.B)
 
-  // varify inst 1
-  val verify1 = io.ExIn1.inst_type === InstTypeFromDe.B_TYPE ||
-    io.ExIn1.inst_type === InstTypeFromDe.J_TYPE
+  val isBranch1 = io.ExIn1.inst_type === InstTypeFromDe.B_TYPE || 
+                io.ExIn1.inst_type === InstTypeFromDe.J_TYPE
+  val isBranch2 = io.ExIn2.inst_type === InstTypeFromDe.B_TYPE || 
+                io.ExIn2.inst_type === InstTypeFromDe.J_TYPE
 
-  when(verify1 && bpFifo.io.deq.valid) {
-    val predTarget = bpFifo.io.deq.bits
-    val realTarget = io.branchTarget1
-    verifyTarget := predTarget === realTarget
-    bpFifo.io.deq.ready := true.B
-  }
+  val realTarget1 = io.branchTarget1
+  val realTarget2 = io.branchTarget2
 
-  // varify of inst 2
-  val verify2 = io.ExIn2.inst_type === InstTypeFromDe.B_TYPE ||
-    io.ExIn2.inst_type === InstTypeFromDe.J_TYPE
-
-  when(verify2 && bpFifo.io.deq.valid) {
-    val predTarget = bpFifo.io.deq.bits
-    val realTarget = io.branchTarget2
-    verifyTarget := predTarget === realTarget
-    bpFifo.io.deq.ready := true.B
-  }
-
-  // default
-  when(!verify1 && !verify2) {
-    bpFifo.io.deq.ready := false.B
-    verifyTarget := false.B
+  // Verification logic
+  when(bpFifo.io.deq.valid) {
+    // Case 1: BP made a prediction (valid)
+    when(isBranch1 || isBranch2) {
+      val predTarget = bpFifo.io.deq.bits
+      val realTarget = Mux(isBranch1, realTarget1, realTarget2)
+      
+      // Prediction correct if:
+      // 1. Predicted target matches actual target
+      verifyTarget := predTarget === realTarget
+      mispredict := predTarget =/= realTarget
+      
+      bpFifo.io.deq.ready := true.B
+    }.otherwise {
+      // Case 2: BP predicted but instruction wasn't branch -> mispredict
+      verifyTarget := false.B
+      mispredict := true.B
+      bpFifo.io.deq.ready := true.B
+    }
+  }.otherwise {
+    // Case 3: BP didn't predict (!valid)
+    when(isBranch1 || isBranch2) {
+      // Case 3a: Actual branch but no prediction -> mispredict
+      verifyTarget := false.B
+      mispredict := true.B
+    }.otherwise {
+      // Case 3b: No branch and no prediction -> correct
+      verifyTarget := true.B
+      mispredict := false.B
+    }
   }
 
   io.bpVerify := verifyTarget
-  io.cu.ex_branch_mispredict_detected_i := !verifyTarget
+  io.cu.ex_branch_mispredict_detected_i := mispredict
 }
 
