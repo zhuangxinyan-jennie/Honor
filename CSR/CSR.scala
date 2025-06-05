@@ -6,12 +6,6 @@ import chisel3.util._
 import CSR.exceptcode
 
 class CSR0 extends Bundle{
-    val clk = Input(Clock())
-    val rst = Input(Bool())
-
-    //流水线控制
-    val stallE = Input(Bool())
-   
     //csrrw指令信息
     val csrrw_valid = Input(Bool()) //csrrw操作有效
     val csrrw_addr = Input(UInt(12.W)) //csr地址 

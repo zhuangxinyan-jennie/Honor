@@ -27,7 +27,8 @@ class IssueCtrl extends Module {
         val D_slave_memtoReg = Input(Bool())      // 从指令是否是load指令++++++++++++++++++++++++++++++++++++++++++++
         val D_slave_mem_write = Input(Bool())      // 从指令是否是store指令++++++++++++++++++++++++++++++++++++++++++++
         val D_slave_is_ja = Input(Bool())          // 从指令是否是跳转指令  JAL JALR++++++++++++++++++++++++++++
-        val D_slave_may_bring_flush = Input(Bool())// 从指令是否可能带来flush++++++++++++++++++++++++++++++++++++++++++++
+        val D_slave_is_branch = Input(Bool())      // 从指令是否是分支指令++++++++++++++++++++++++++++++++++++++++++++
+        // val D_slave_may_bring_flush = Input(Bool())// 从指令是否可能带来flush++++++++++++++++++++++++++++++++++++++++++++
         val D_slave_is_csr = Input(Bool())         // 从指令是否是CSR指令++++++++++++++++++++++++++++++++++++++++++++
        
         // FIFO状态信号
@@ -51,6 +52,7 @@ class IssueCtrl extends Module {
     val csr_conflict = Wire(Bool())    // CSR冲突
     val master_mem_conflict = Wire(Bool())    // 访存冲突
     val slave_mem_conflict = Wire(Bool())
+    val branch_conflict = Wire(Bool())
     // FIFO禁用 当FIFO为空或几乎为空时，禁用从指令的发射
     fifo_disable := io.fifo_empty || io.fifo_almost_empty
 
@@ -81,6 +83,9 @@ class IssueCtrl extends Module {
     // CSR独占周期++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     csr_conflict := io.D_slave_is_csr || io.D_master_is_csr
 
+    //branch只能在主指令发射
+    branch_conflict := io.D_slave_is_branch 
+
     //主指令是访存指令，禁止发射从指令
     master_mem_conflict := io.D_master_memtoReg || io.D_master_mem_write
 
@@ -89,12 +94,13 @@ class IssueCtrl extends Module {
     // 从指令使能
     io.D_slave_ena := !(!io.D_master_ena | 
                         fifo_disable | 
-                        io.D_slave_may_bring_flush | 
+                        // io.D_slave_may_bring_flush | 
                         slave_mem_conflict |
                         load_stall |
                         war_reg |
                         ja_conflict |        //JAL/JALR冲突
                         csr_conflict |
+                        branch_conflict |
                         master_mem_conflict )      
 }
 

@@ -5,7 +5,7 @@ import chisel3.util._
 import parse.BaseDecode
 import name._
 import issue_ctrl._
-import name.ALU.ALU_COPY
+import name.ALU.ALU_JAL12
 import name.InstType.{I_TYPE, J_TYPE}
 
 import scala.language.reflectiveCalls
@@ -67,7 +67,8 @@ class DualIssueDecode extends Module {
     // val slave_in_delayslot = Output(Bool())  // 从指令是否在延迟槽
     // FIFO 控制信号
     val fifo_push = Output(Bool())  // 是否将指令推回 FIFO
-    val fifo_data = Output(UInt(32.W))  // 推回 FIFO 的指令  // 我的从指令
+    // val fifo_data = Output(UInt(32.W))  // 推回 FIFO 的指令  // 我的从指令
+    val decode_branch_valid = Output(Bool())  // 译码阶段正常运行且发射的指令是分支指令  -> enaD
   })
 
   // 实例化译码模块
@@ -92,8 +93,8 @@ class DualIssueDecode extends Module {
   issue_ctrl.io.D_master_memtoReg := decode1.io.mem_read //是否是load指令
   issue_ctrl.io.D_master_is_branch := decode1.io.inst_type === 5.U  // B_TYPE
 //  issue_ctrl.io.D_master_is_ja := decode1.io.inst_type === 1.U || (decode1.io.inst_type === 3.U && decode1.io.opcode === "b1100111".U)  // JAL或JALR
-  issue_ctrl.io.D_master_is_ja := decode1.io.alu_op === ALU_COPY &&
-    (decode1.io.inst_type === J_TYPE || decode1.io.inst_type === I_TYPE)
+  issue_ctrl.io.D_master_is_ja := decode1.io.alu_op === ALU_JAL12 
+    // (decode1.io.inst_type === J_TYPE || decode1.io.inst_type === I_TYPE)
   issue_ctrl.io.D_master_is_csr := decode1.io.inst_type === 8.U  // CSR_TYPE
   // issue_ctrl.io.D_master_is_fence12 := decode1.io.inst_type === 7.U  // FENCE_TYPE
   issue_ctrl.io.D_master_mem_write := decode1.io.mem_write //是否是store指令
@@ -106,9 +107,9 @@ class DualIssueDecode extends Module {
   issue_ctrl.io.D_slave_memtoReg := decode2.io.mem_read //从指令是否是load指令
   issue_ctrl.io.D_slave_mem_write := decode2.io.mem_write //从指令是否是store指令
 //  issue_ctrl.io.D_slave_is_ja := decode2.io.inst_type === 1.U || (decode2.io.inst_type === 3.U && decode2.io.opcode === "b1100111".U)  // JAL或JALR
-  issue_ctrl.io.D_slave_is_ja := decode2.io.alu_op === ALU_COPY &&
-    (decode2.io.inst_type === J_TYPE || decode2.io.inst_type === I_TYPE)
-  issue_ctrl.io.D_slave_may_bring_flush := decode2.io.inst_type === 5.U  // B_TYPE
+  issue_ctrl.io.D_slave_is_ja := decode2.io.alu_op === ALU_JAL12
+  issue_ctrl.io.D_slave_is_branch := decode2.io.inst_type === 5.U
+  // issue_ctrl.io.D_slave_may_bring_flush := decode2.io.inst_type === 5.U  // B_TYPE
   issue_ctrl.io.D_slave_is_csr := decode2.io.inst_type === 8.U  // CSR_TYPE
   // issue_ctrl.io.D_slave_is_fence12 := decode2.io.inst_type === 7.U  // FENCE_TYPE
 
@@ -122,7 +123,8 @@ class DualIssueDecode extends Module {
   // FIFO 控制逻辑
   // 当从指令不使能时，将指令推回FIFO
   io.fifo_push := !io.slave_ena
-  io.fifo_data := io.inst2
+  // io.fifo_data := io.inst2
+  
 
   // 连接译码模块的输出
   io.decode1.inst_type := decode1.io.inst_type
@@ -164,4 +166,7 @@ class DualIssueDecode extends Module {
   io.decode2.pc_out := Mux(io.slave_ena, io.pc2, 0.U)
   io.decode2.ex_rs1_data := Mux(io.slave_ena, decode2.io.ex_rs1_data, 0.U)
   io.decode2.ex_rs2_data := Mux(io.slave_ena, decode2.io.ex_rs2_data, 0.U)
+  
+  // 译码阶段分支指令有效信号
+  io.decode_branch_valid := (decode1.io.inst_type === 5.U) || (decode1.io.alu_op === ALU_JAL12)
 }
