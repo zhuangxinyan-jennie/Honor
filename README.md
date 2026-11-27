@@ -1,3 +1,23 @@
+# Chisel Dual-Issue RISC-V Core
+
+> A five-stage, in-order dual-issue RISC-V processor implemented in Chisel,
+> featuring dynamic branch prediction, dependency-aware issue control,
+> operand forwarding, CSR support, and a write-back data cache.
+
+## Highlights
+
+- **Dual-issue pipeline:** Dispatches up to two instructions per cycle while
+  preserving in-order execution and suppressing unsafe slave issue.
+- **Hazard handling:** Resolves register dependencies with issue checks,
+  WB-to-ID bypassing, EX/MEM forwarding, and load-use stalls.
+- **Control flow:** Uses a BTB and execution-stage verification for speculative
+  fetch, recovery, and pipeline flushing.
+- **Memory subsystem:** Provides a direct-mapped, write-back data cache with
+  hit/miss handling, dirty-line eviction, and subword accesses.
+- **Hardware construction:** Implements the processor in Chisel/Scala and
+  generates synthesizable Verilog for downstream FPGA workflows.
+
+## Architecture Notes
 ![image](https://github.com/user-attachments/assets/3d8aecf7-0601-4aa5-8034-13cb047a73f3)
 **一、整体架构与数据通路设计流程 (Data Path Design Flow)**
 
